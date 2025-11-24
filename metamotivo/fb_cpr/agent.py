@@ -288,12 +288,12 @@ class FBcprAgent(FBAgent):
 
         with torch.no_grad():
             output_metrics = {
-                "disc_loss": loss.detach(),
-                "disc_expert_loss": expert_loss.detach().mean().detach(),
-                "disc_train_loss": unlabeled_loss.detach().mean().detach(),
+                "disc/loss": loss.detach(),
+                "disc/expert_loss": expert_loss.detach().mean().detach(),
+                "disc/train_loss": unlabeled_loss.detach().mean().detach(),
             }
             if grad_penalty is not None:
-                output_metrics["disc_wgan_gp_loss"] = wgan_gp.detach()
+                output_metrics["disc/wgan_gp_loss"] = wgan_gp.detach()
         return output_metrics
 
     def update_critic(
@@ -326,12 +326,12 @@ class FBcprAgent(FBAgent):
 
         with torch.no_grad():
             output_metrics = {
-                "target_Q": target_Q.mean().detach(),
-                "Q1": Qs.mean().detach(),
-                "mean_next_Q": Q_mean.mean().detach(),
-                "unc_Q": Q_unc.mean().detach(),
-                "critic_loss": critic_loss.mean().detach(),
-                "mean_disc_reward": reward.mean().detach(),
+                "critic/target_Q": target_Q.mean().detach(),
+                "critic/disc_reward": reward.mean().detach(),
+                "critic/critic_Q": Qs.mean().detach(),
+                #"mean_next_Q": Q_mean.mean().detach(),
+                #"unc_Q": Q_unc.mean().detach(),
+                "critic/loss": critic_loss.mean().detach(),
             }
         return output_metrics
 
@@ -366,8 +366,8 @@ class FBcprAgent(FBAgent):
 
         with torch.no_grad():
             output_metrics = {
-                "actor_loss": actor_loss.detach(),
-                "Q_discriminator": Q_discriminator.mean().detach(),
-                "Q_fb": Q_fb.mean().detach(),
+                "actor/loss": actor_loss.detach(),
+                "actor/Q_dis": Q_discriminator.mean().detach(),
+                "actor/Q_fb": Q_fb.mean().detach(),
             }
         return output_metrics

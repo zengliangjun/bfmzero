@@ -203,14 +203,14 @@ class FBAgent:
 
         diff = Ms - discount * target_M  # num_parallel x batch x batch
         fb_offdiag = 0.5 * (diff * self.off_diag).pow(2).sum() / self.off_diag_sum
-        fb_diag = -torch.diagonal(diff, dim1=1, dim2=2).mean() * Ms.shape[0]
-        fb_loss = fb_offdiag + fb_diag
+        fb_diag = torch.diagonal(diff, dim1=1, dim2=2).mean() * Ms.shape[0]
+        fb_loss = fb_offdiag - fb_diag
 
         # compute orthonormality loss for backward embedding
         Cov = torch.matmul(B, B.T)
-        orth_loss_diag = -Cov.diag().mean()
+        orth_loss_diag = Cov.diag().mean()
         orth_loss_offdiag = 0.5 * (Cov * self.off_diag).pow(2).sum() / self.off_diag_sum
-        orth_loss = orth_loss_offdiag + orth_loss_diag
+        orth_loss = orth_loss_offdiag - orth_loss_diag
         fb_loss += self.cfg.train.ortho_coef * orth_loss
 
         q_loss = torch.zeros(1, device=z.device, dtype=z.dtype)
@@ -239,19 +239,28 @@ class FBAgent:
 
         with torch.no_grad():
             output_metrics = {
-                "target_M": target_M.mean(),
-                "M1": Ms[0].mean(),
-                "F1": Fs[0].mean(),
-                "B": B.mean(),
-                "B_norm": torch.norm(B, dim=-1).mean(),
-                "z_norm": torch.norm(z, dim=-1).mean(),
-                "fb_loss": fb_loss,
-                "fb_diag": fb_diag,
-                "fb_offdiag": fb_offdiag,
-                "orth_loss": orth_loss,
-                "orth_loss_diag": orth_loss_diag,
-                "orth_loss_offdiag": orth_loss_offdiag,
-                "q_loss": q_loss,
+                "fb_morth/target_M": target_M.mean(),
+                "fb_morth/M1": Ms[0].mean(),
+                "fb_morth/F1": Fs[0].mean(),
+                "fb_morth/M2": Ms[1].mean(),
+                "fb_morth/F2": Fs[1].mean(),
+                "fb/B": B.mean(),
+                #"fb/B_norm": torch.norm(B, dim=-1).mean(),
+                #"fb/z_norm": torch.norm(z, dim=-1).mean(),
+
+                "fb/loss": fb_loss,
+
+                "fb_morth/loss": fb_offdiag - fb_diag,
+                "fb_morth/diag": fb_diag,
+                "fb_morth/offdiag": fb_offdiag,
+
+                "fb_borth/loss": orth_loss,
+                "fb_borth/diag": orth_loss_diag,
+                "fb_borth/offdiag": orth_loss_offdiag,
+
+                "fb_q/loss": q_loss,
+                "fb_q/target_Q": target_Q.mean(),
+                "fb_q/Q": Qs.mean(),
             }
         return output_metrics
 

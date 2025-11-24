@@ -9,6 +9,12 @@ import os
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
+import os.path as osp
+import sys
+work_root = osp.dirname(osp.dirname(__file__))
+sys.path.append(work_root)
+os.chdir(work_root)
+
 import torch
 
 torch.set_float32_matmul_precision("high")
