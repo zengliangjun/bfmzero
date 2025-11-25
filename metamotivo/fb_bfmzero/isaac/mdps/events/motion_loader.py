@@ -27,7 +27,17 @@ class MotionLoader:
         self.size = self.joint_pos.shape[0]
 
     def _load_file(self, motion_file):
-        data = np.load(motion_file)
+        data = np.load(motion_file, allow_pickle=True)
+
+        file = data.files[0]
+        if file.endswith(".npz") or file.endswith(".npy"):
+            for file in data.files:
+                item = data[file].item()
+                self._load_data(item)
+        else:
+            self._load_data(data)
+
+    def _load_data(self, data):
         self.joint_pos.append(torch.tensor(data["joint_pos"], dtype=torch.float32))
         self.joint_vel.append(torch.tensor(data["joint_vel"], dtype=torch.float32))
 
@@ -39,7 +49,7 @@ class MotionLoader:
     def _load_trajectories(self):
         for root, dirs, files in os.walk(self.motions_root):
             for file in files:
-                if not file.endswith(".npz"):
+                if not file.endswith(".npz") and not file.endswith(".npy"):
                     continue
                 full_file = osp.join(root, file)
                 self._load_file(full_file)

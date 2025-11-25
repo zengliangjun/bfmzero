@@ -108,8 +108,17 @@ class MotionBuffer:
         self._load_trajectories()
 
     def _load_file(self, motion_file):
-        data = np.load(motion_file)
+        data = np.load(motion_file, allow_pickle=True)
 
+        file = data.files[0]
+        if file.endswith(".npz") or file.endswith(".npy"):
+            for file in data.files:
+                item = data[file].item()
+                self._load_data(item)
+        else:
+            self._load_data(data)
+
+    def _load_data(self, data):
         slice_length = self.config.seq_length + self.config.history_horizon + 1
 
         observations = []
@@ -153,7 +162,7 @@ class MotionBuffer:
     def _load_trajectories(self):
         for root, dirs, files in os.walk(self.config.motions_root):
             for file in files:
-                if not file.endswith(".npz"):
+                if not file.endswith(".npz") and not file.endswith(".npy"):
                     continue
                 full_file = osp.join(root, file)
                 self._load_file(full_file)
@@ -228,3 +237,8 @@ class MotionBuffer:
     def update_priorities(self, items):
         pass
 
+if __name__ == "__main__":
+    cfg = MotionBufferConfig()
+    cfg.motions_root = "/workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/motions/g1/tmpdata/"
+
+    cfg.make_buffer()

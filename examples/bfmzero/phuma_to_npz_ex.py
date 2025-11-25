@@ -3,15 +3,13 @@
 .. code-block:: bash
 
     # Usage
-    python examples/bfmzero/csv_to_npz_ex.py --input_file /workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/csv/g1/LAFAN1_Retargeting_Dataset --input_fps 30 \
-    --output_name /workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/motions/g1/LAFAN1_Retargeting_Dataset/ --output_fps 50 --headless
-
-    python examples/bfmzero/csv_to_npz_ex.py --input_file /workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/csv/g1/OMOMO --input_fps 50 \
-    --output_name /workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/motions/g1/OMOMO/ --output_fps 50 --headless
+    python examples/bfmzero/phuma_to_npz_ex.py --input_file "/workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/PHUMA/data/g1/" \
+    --replace_dir "/workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/PHUMA/data/g1/" \
+    --out_dir "/workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/motions/g1/PHUMA/" --output_fps 50 --headless
 
 """
 
-import csv_to_npz
+import phuma_to_npz
 
 
 import os
@@ -29,46 +27,41 @@ from isaaclab.sim import SimulationContext
 def main():
     """Main function."""
     # Load kit helper
-    sim_cfg = sim_utils.SimulationCfg(device=csv_to_npz.args_cli.device)
-    sim_cfg.dt = 1.0 / csv_to_npz.args_cli.output_fps
+    sim_cfg = sim_utils.SimulationCfg(device=phuma_to_npz.args_cli.device)
+    sim_cfg.dt = 1.0 / phuma_to_npz.args_cli.output_fps
     sim = sim_utils.SimulationContext(sim_cfg)
     # Design scene
-    scene_cfg = csv_to_npz.ReplayMotionsSceneCfg(num_envs=1, env_spacing=2.0)
-    scene = csv_to_npz.InteractiveScene(scene_cfg)
+    scene_cfg = phuma_to_npz.ReplayMotionsSceneCfg(num_envs=1, env_spacing=2.0)
+    scene = phuma_to_npz.InteractiveScene(scene_cfg)
     # Play the simulator
     sim.reset()
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
 
-    if not osp.isdir(csv_to_npz.args_cli.input_file):
-        base_dir = osp.dirname(csv_to_npz.args_cli.input_file)
-        inputfiles = [csv_to_npz.args_cli.input_file]
+    if not osp.isdir(phuma_to_npz.args_cli.input_file):
+        base_dir = osp.dirname(phuma_to_npz.args_cli.input_file)
+        inputfiles = [phuma_to_npz.args_cli.input_file]
     else:
-        base_dir = csv_to_npz.args_cli.input_file
+        base_dir = phuma_to_npz.args_cli.input_file
 
         inputfiles = []
-        for root, dirs, files in os.walk(csv_to_npz.args_cli.input_file):
+        for root, dirs, files in os.walk(phuma_to_npz.args_cli.input_file):
             if -1 == root.find("g1"):
                 continue
 
             for file in files:
-                if not file.endswith(".csv"):
+                if not file.endswith(".npy"):
                     continue
                 full_file = osp.join(root, file)
                 inputfiles.append(full_file)
 
-    out_dir = csv_to_npz.args_cli.output_name
-
+    print("[INFO]: Walk complete...")
     for inputfile in inputfiles:
 
-        csv_to_npz.args_cli.input_file = inputfile
-        output_name = inputfile.replace(base_dir, out_dir)
-        output_name = output_name.replace(".csv", "")
-        csv_to_npz.args_cli.output_name = output_name
-        csv_to_npz.root0 = root0
+        phuma_to_npz.args_cli.input_file = inputfile
 
-        csv_to_npz.run_simulator(
+        phuma_to_npz.run_simulator(
             sim,
             scene,
             joint_names=[
@@ -109,5 +102,5 @@ if __name__ == "__main__":
     # run the main function
     main()
     # close sim app
-    csv_to_npz.simulation_app.close()
+    phuma_to_npz.simulation_app.close()
 
