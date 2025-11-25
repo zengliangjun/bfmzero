@@ -20,6 +20,7 @@ from metamotivo.fb_bfmzero.buffers import isaac_buffer
 
 @dataclasses.dataclass
 class TrainConfig:
+    name: str = "fb_bfmzero"
     seed: int = 0
     motions_buffer: isaac_buffer.MotionBufferConfig = isaac_buffer.MotionBufferConfig()
 
@@ -34,7 +35,6 @@ class TrainConfig:
     log_every_steps: int = 1 #2_000
     checkpoint_every_steps: int = 2_000
     eval_every_steps: int = 2_000
-
 
     # work dir
     work_dir: str | None = None
@@ -66,10 +66,10 @@ class Workspace:
 
     def _preinit_workdir(self):
         date = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")
-        workdir = osp.join(os.getcwd(), "logs", self.config.name, f"run_{date}")
+        workdir = osp.join(os.getcwd(), "logs", self.cfg.name, f"run_{date}")
         os.makedirs(workdir)
         self.work_dir = workdir
-        setattr(self.config.env_config, "workdir", workdir)
+        self.cfg.work_dir = workdir
 
         ulogger.info(f"init_workdir: {workdir}.")
 
@@ -77,8 +77,6 @@ class Workspace:
                              use_tb=True,
                              use_wandb=False,
                              use_hiplog=False)
-
-        self.cfg.work_dir = self.work_dir
 
 
     def __init__(self, cfg: TrainConfig, agent_cfg: agent.Config) -> None:
@@ -90,10 +88,10 @@ class Workspace:
         set_seed_everywhere(self.cfg.seed)
         self.agent =  agent.BFMAgent(**dataclasses.asdict(agent_cfg))
 
-        with (self.work_dir / "train_config.json").open("w") as f:
+        with open(osp.join(self.work_dir, "train_config.json"), "w") as f:
             json.dump(dataclasses.asdict(self.cfg), f, indent=4)
 
-        with (self.work_dir / "agent_config.json").open("w") as f:
+        with open(osp.join(self.work_dir, "agent_config.json"), "w") as f:
             json.dump(dataclasses.asdict(self.agent_cfg), f, indent=4)
 
     @torch.no_grad()
@@ -116,7 +114,7 @@ class Workspace:
 
             action = self.agent.act(obs=(observations, privileges), z=context_z, mean=False)
 
-        next_obs, rewards, next_dones, next_infos = self.env.step(action)
+        next_obs, rewards, next_dones, next_infos = env.step(action)
 
         ## update context
         context_items['context_z'] = context_z
@@ -125,7 +123,7 @@ class Workspace:
         context_items['privileges'] = next_infos['privileges']
 
         if done.shape[0] == torch.sum(done.float()):
-            return
+            return None
 
         indexes = ~done
         data = {
@@ -135,7 +133,7 @@ class Workspace:
             "z": context_z[indexes],
             "step_count": step_count[indexes],
             "next": {
-                "observations": next_infos['observations'][:, -1][indexes],
+                "observations": next_infos['observations'][indexes],
                 "privileges": next_infos['privileges'][indexes],
                 "rewards": rewards[indexes][:, None],
                 "terminated": next_infos["terminated"][indexes][:, None],
@@ -156,7 +154,7 @@ class Workspace:
 
 
         obs, extras = env.reset()
-        done = np.zeros(self.agent_cfg.train.batch_size, dtype=np.bool)
+        done = torch.zeros(self.agent_cfg.train.batch_size, dtype=torch.bool)
 
         collect_context = {
                 "observations": extras["observations"],
@@ -171,13 +169,16 @@ class Workspace:
         total_metrics = None
 
         progb = tqdm(total=self.cfg.max_steps)
-        for step in range(0, self.cfg.max_steps):
+        for step in range(1, self.cfg.max_steps + 1):
 
             for _ in range(self.cfg.one_step_collect_iters):
                 collect_context['step'] = step
                 data = self._train_collect_one_step(env, collect_context)
-                replay_buffer["train"].extend(data)
+                if data is not None:
+                    replay_buffer["train"].extend(data)
 
+            if step <= self.cfg.seed_steps:
+                continue
 
             for _ in range(self.cfg.one_step_update_iters):
                 metrics = self.agent.update(replay_buffer, step)
@@ -219,8 +220,8 @@ class Workspace:
 
 
             if step % self.cfg.checkpoint_every_steps == 0:
-                self.agent.save(str(self.work_dir / "checkpoint"))
+                self.agent.save(osp.join(self.work_dir, "checkpoint"))
 
             progb.update(1)
 
-        self.agent.save(str(self.work_dir / "checkpoint"))
+        self.agent.save(osp.join(self.work_dir, "checkpoint"))

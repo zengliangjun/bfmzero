@@ -199,11 +199,21 @@ def initialize_storage(data: Dict, storage: Dict, capacity: int, device: Device)
                 s[k] = {}
                 recursive_initialize(v, s[k])
             else:
-                s[k] = torch.zeros(
-                    (capacity, v.shape[1] if len(v.shape) == 2 else v.shape[0]),
-                    device=device,
-                    dtype=dtype_numpytotorch(v.dtype),
-                )
+                if len(v.shape) == 2:
+                    s[k] = torch.zeros(
+                        (capacity, v.shape[1]),
+                        device=device,
+                        dtype=dtype_numpytotorch(v.dtype),
+                    )
+                elif len(v.shape) == 3:
+                    s[k] = torch.zeros(
+                        (capacity, v.shape[1], v.shape[2]),
+                        device=device,
+                        dtype=dtype_numpytotorch(v.dtype),
+                    )
+                else:
+                    assert False
+
 
     recursive_initialize(data, storage)
 

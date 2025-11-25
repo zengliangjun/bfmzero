@@ -78,31 +78,32 @@ class IsaacWarp:
         self.envs = RslRlVecEnvWrapper(envs)
         self.env_cfg = env_cfg
 
-    def _calcute_objs(self, infos):
-        items = infos['observations']
+    def _calcute_objs(self, items):
         data = items["policy"]
         observations = []
         for key in self.config.observations_key:
-            observations.append(
-                torch.tensor(data[key], dtype=torch.float32, device=self.device))
+            observations.append(data[key].detach().clone())
 
 
         data = items["critic"]
         privileges = []
         for key in self.config.privileges_key:
-            privileges.append(
-                torch.tensor(data[key], dtype=torch.float32, device=self.device))
+            privileges.append(data[key].detach().clone())
 
 
         observations = torch.cat(observations, dim = -1)
         privileges = torch.cat(privileges, dim = -1)
-        infos["observations"] = observations
-        infos["privileges"] = privileges
+
+        objs = {
+            "observations": observations,
+            "privileges": privileges
+        }
+        return objs
 
 
     def reset(self) -> Tuple[torch.Tensor, Dict[str, object]]:
         obs, infos = self.envs.get_observations()
-        self._calcute_objs(infos)
+        infos = self._calcute_objs(infos['observations'])
         return obs, infos
 
     def timestep(self) -> torch.Tensor:
@@ -125,14 +126,16 @@ class IsaacWarp:
         if self.envs.clip_actions is not None:
             actions = torch.clamp(actions, -self.envs.clip_actions, self.envs.clip_actions)
         # record step information
-        obs_dict, rewards, terminated, truncated, extras = self.envs.env.step(actions)
+        obs_dict, rewards, terminated, truncated, infos = self.envs.env.step(actions)
         # compute dones for compatibility with RSL-RL
         dones = (terminated | truncated).to(dtype=torch.long)
         # move extra observations to the extras dict
-        self._calcute_objs(extras)
+        infos = self._calcute_objs(obs_dict)
+        infos["terminated"] = terminated
+        infos["truncated"] = truncated
 
         # return the step information
-        return obs_dict, rewards, dones, extras
+        return obs_dict, rewards, dones, infos
 
     def end(self):
         pass

@@ -8,21 +8,10 @@ from typing import Union, Mapping, Optional, Dict
 from pathlib import Path
 from loguru import logger as ulogger
 import dataclasses
-from typing import Optiona
 
-from metamotivo.fb_bfmzero.buffers import configs
 
 @dataclasses.dataclass
 class MotionBufferConfig():
-    """
-    Dataclass for replay buffer configuration.
-
-    Args:
-        max_size: maximum size of the replay buffer
-        batch_size: batch size for sampling from the replay buffer
-    """
-    _target_: str = "isaac_fb.buffers.isaac_buffer:MotionBuffer"
-
     device: str = "cpu"
 
     motions_root: Optional[str] = None
@@ -120,11 +109,6 @@ class MotionBuffer:
 
     def _load_file(self, motion_file):
         data = np.load(motion_file)
-        fps = data["fps"]
-        if isinstance(fps, np.ndarray):
-            assert fps[0] == self.config.fps
-        else:
-            assert fps == self.config.fps
 
         slice_length = self.config.seq_length + self.config.history_horizon + 1
 
@@ -137,7 +121,7 @@ class MotionBuffer:
         for key in self.config.privileges_key:
             privileges.append(
                 torch.tensor(data[key], dtype=torch.float32, device=self.device))
-            
+
 
         observations = torch.cat(observations, dim = -1)
         privileges = torch.cat(privileges, dim = -1)
@@ -168,9 +152,6 @@ class MotionBuffer:
 
     def _load_trajectories(self):
         for root, dirs, files in os.walk(self.config.motions_root):
-            if -1 == root.find(self.config.robot_name):
-                continue
-
             for file in files:
                 if not file.endswith(".npz"):
                     continue

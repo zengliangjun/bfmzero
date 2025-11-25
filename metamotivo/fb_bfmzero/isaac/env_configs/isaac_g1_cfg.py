@@ -226,7 +226,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "motions_root": envs_configs.replay_root,
+            "motions_root": envs_configs.motions_root,
             "motions_sample_ratio": 0.8
         },
     )

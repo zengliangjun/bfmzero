@@ -11,7 +11,7 @@ from ..nn_models import weight_init, _soft_update_params, eval_mode
 from ..misc.zbuffer import ZBuffer
 
 from .model import Config as ModelConfig
-from .model import Model, config_from_dict
+from .model import FBModel, config_from_dict
 
 
 @dataclasses.dataclass
@@ -39,8 +39,9 @@ class BFMAgent(FBcprAgent):
         del seq_length, batch_size
 
         self.cfg = config_from_dict(kwargs, Config)
-        self._model = Model(**dataclasses.asdict(self.cfg.model))
+        self._model = FBModel(**dataclasses.asdict(self.cfg.model))
         self._model.to(self.cfg.model.device)
+        print(self._model)
         self.setup_training()
         self.setup_compile()
 
@@ -99,11 +100,11 @@ class BFMAgent(FBcprAgent):
         self._target_critic_map_paramlist = tuple(x for x in self._model._target_critic_.parameters())
 
         # bfm zero
-        self._auxi_critic_paramlist = tuple(x for x in self._model._auxi_critic.parameters())
-        self._target_auxi_critic_paramlist = tuple(x for x in self._model._target_auxi_critic.parameters())
+        self._auxi_critic_map_paramlist = tuple(x for x in self._model._auxi_critic_.parameters())
+        self._target_auxi_critic_map_paramlist = tuple(x for x in self._model._target_auxi_critic_.parameters())
 
-        self.critic_optimizer = torch.optim.Adam(
-            self._model._auxi_critic.parameters(),
+        self.auxi_critic_optimizer = torch.optim.Adam(
+            self._model._auxi_critic_.parameters(),
             lr=self.cfg.train.lr_auxi_critic,
             capturable=self.cfg.cudagraphs and not self.cfg.compile,
             weight_decay=self.cfg.train.weight_decay,
@@ -144,12 +145,12 @@ class BFMAgent(FBcprAgent):
         train_obs, train_privileges, train_action, train_z, \
         train_next_obs, train_next_privileges, train_terminated, \
             train_rewards = (
-            train_batch["observation"].to(self.device),
+            train_batch["observations"].to(self.device),
             train_batch["privileges"].to(self.device),
             train_batch["action"].to(self.device),
             train_batch["z"].to(self.device),
 
-            train_batch["next"]["observation"].to(self.device),
+            train_batch["next"]["observations"].to(self.device),
             train_batch["next"]["privileges"].to(self.device),
             train_batch["next"]["terminated"].to(self.device),
             train_batch["next"]["rewards"].to(self.device),
@@ -158,38 +159,30 @@ class BFMAgent(FBcprAgent):
 
         expert_obs, expert_privileges, \
         expert_next_obs, expert_next_privileges = (
-            expert_batch["observation"].to(self.device),
+            expert_batch["observations"].to(self.device),
             expert_batch["privileges"].to(self.device),
-            expert_batch["next"]["observation"].to(self.device),
+            expert_batch["next"]["observations"].to(self.device),
             expert_batch["next"]["privileges"].to(self.device),
         )
-
-        self._model._obs_normalizer(train_obs)
-        self._model._obs_normalizer(train_next_obs)
-
-        self._model._obs_privileges_normalizer(train_privileges)
-        self._model._obs_privileges_normalizer(train_next_privileges)
-
-        with torch.no_grad(), eval_mode(self._model._obs_normalizer), eval_mode(self._model._obs_privileges_normalizer):
-            train_obs, train_next_obs = (
-                self._model._obs_normalizer(train_obs),
-                self._model._obs_normalizer(train_next_obs),
+        #
+        self._model.normalize((train_obs, train_privileges))
+        self._model.normalize((train_next_obs, train_next_privileges))
+        ##
+        train_obs, train_privileges = self._model._normalize(
+                (train_obs, train_privileges) )
+        train_next_obs, train_next_privileges = self._model._normalize(
+                (train_next_obs,
+                train_next_privileges)
             )
-            train_privileges, train_next_privileges = (
-                self._model._obs_privileges_normalizer(train_privileges),
-                self._model._obs_privileges_normalizer(train_next_privileges),
+        expert_obs, expert_privileges = self._model._normalize(
+                (expert_obs,
+                 expert_privileges)
             )
-
-            expert_obs, expert_next_obs = (
-                self._model._obs_normalizer(expert_obs),
-                self._model._obs_normalizer(expert_next_obs),
+        expert_next_obs, expert_next_privileges = self._model._normalize(
+                (expert_next_obs,
+                 expert_next_privileges)
             )
-
-            expert_privileges, expert_next_privileges = (
-                self._model._obs_privileges_normalizer(expert_privileges),
-                self._model._obs_privileges_normalizer(expert_next_privileges),
-            )
-
+        ##
         torch.compiler.cudagraph_mark_step_begin()
         expert_z = self.encode_expert(next_obs=[expert_next_obs, expert_next_privileges])
 
@@ -305,9 +298,9 @@ class BFMAgent(FBcprAgent):
         critic_loss = 0.5 * num_parallel * F.mse_loss(Qs, expanded_targets)
 
         # optimize critic
-        self.critic_optimizer.zero_grad(set_to_none=True)
+        self.auxi_critic_optimizer.zero_grad(set_to_none=True)
         critic_loss.backward()
-        self.critic_optimizer.step()
+        self.auxi_critic_optimizer.step()
 
         with torch.no_grad():
             output_metrics = {
@@ -362,3 +355,42 @@ class BFMAgent(FBcprAgent):
                 "actor/Q_auxi": Qs_auxi.mean().detach(),
             }
         return output_metrics
+
+
+    @torch.compiler.disable
+    def gradient_penalty_wgan(
+        self,
+        real_obs: torch.Tensor,
+        real_z: torch.Tensor,
+        fake_obs: torch.Tensor,
+        fake_z: torch.Tensor,
+    ) -> torch.Tensor:
+
+        real_obs = self._model._build_back_obs(real_obs)
+        fake_obs = self._model._build_back_obs(fake_obs)
+
+        batch_size = real_obs.shape[0]
+        alpha = torch.rand(batch_size, 1, device=real_obs.device)
+
+        interpolates = torch.cat(
+            [
+                (alpha * real_obs + (1 - alpha) * fake_obs).requires_grad_(True),
+                (alpha * real_z + (1 - alpha) * fake_z).requires_grad_(True),
+            ],
+            dim=1,
+        )
+        compute_logits = self._model._discriminator_.compute_logits
+
+        d_interpolates = compute_logits(
+            interpolates[:, 0 : real_obs.shape[1]], interpolates[:, real_obs.shape[1] :]
+        )
+        gradients = autograd.grad(
+            outputs=d_interpolates,
+            inputs=interpolates,
+            grad_outputs=torch.ones_like(d_interpolates),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty

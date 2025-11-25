@@ -249,7 +249,12 @@ class FBcprAgent(FBAgent):
             ],
             dim=1,
         )
-        d_interpolates = self._model._discriminator.compute_logits(
+        if hasattr(self._model._discriminator, "compute_logits"):
+            compute_logits = self._model._discriminator.compute_logits
+        else:
+            compute_logits = self._model._discriminator_.compute_logits
+
+        d_interpolates = compute_logits(
             interpolates[:, 0 : real_obs.shape[1]], interpolates[:, real_obs.shape[1] :]
         )
         gradients = autograd.grad(
@@ -271,8 +276,15 @@ class FBcprAgent(FBAgent):
         train_z: torch.Tensor,
         grad_penalty: float | None,
     ) -> Dict[str, torch.Tensor]:
-        expert_logits = self._model._discriminator.compute_logits(obs=expert_obs, z=expert_z)
-        unlabeled_logits = self._model._discriminator.compute_logits(obs=train_obs, z=train_z)
+
+        if hasattr(self._model._discriminator, "compute_logits"):
+            compute_logits = self._model._discriminator.compute_logits
+        else:
+            compute_logits = self._model.compute_logits
+
+        expert_logits = compute_logits(obs=expert_obs, z=expert_z)
+        unlabeled_logits = compute_logits(obs=train_obs, z=train_z)
+
         # these are equivalent to binary cross entropy
         expert_loss = -torch.nn.functional.logsigmoid(expert_logits)
         unlabeled_loss = torch.nn.functional.softplus(unlabeled_logits)
@@ -307,7 +319,12 @@ class FBcprAgent(FBAgent):
         num_parallel = self.cfg.model.archi.critic.num_parallel
         # compute target critic
         with torch.no_grad():
-            reward = self._model._discriminator.compute_reward(obs=obs, z=z)
+            if hasattr(self._model._discriminator, "compute_reward"):
+                compute_reward = self._model._discriminator.compute_reward
+            else:
+                compute_reward = self._model.compute_reward
+
+            reward = compute_reward(obs=obs, z=z)
             dist = self._model._actor(next_obs, z, self._model.cfg.actor_std)
             next_action = dist.sample(clip=self.cfg.train.stddev_clip)
             next_Qs = self._model._target_critic(next_obs, z, next_action)  # num_parallel x batch x 1

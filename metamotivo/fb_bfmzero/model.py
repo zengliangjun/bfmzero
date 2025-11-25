@@ -77,7 +77,7 @@ class Config():
     obs_history_horizon: int = 4
     obs_privileges_dim: int = 607
 
-    action_dim: int = 69
+    action_dim: int = 29
     device: str = "cpu"
     inference_batch_size: int = 500_000
     seq_length: int = 8
@@ -88,7 +88,7 @@ class Config():
 
 class FBModel(nn.Module):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
         self.cfg = config_from_dict(kwargs, Config)
 
         arch: ArchiConfig = self.cfg.archi
@@ -144,10 +144,16 @@ class FBModel(nn.Module):
         with (output_folder / "config.json").open("w+") as f:
             json.dump(dataclasses.asdict(self.cfg), f, indent=4)
 
+    def normalize(self, obs: tuple[torch.Tensor]):
+        _b, _n, _d = obs[0].shape
+        obs0 = torch.reshape(obs[0], (_b * _n, _d))
+        obs0 = self._obs_normalizer(obs0)
+        return torch.reshape(obs0, (_b, _n, _d)), self._obs_privileges_normalizer(obs[1])
+
     @torch.no_grad()
     def _normalize(self, obs: tuple[torch.Tensor]):
         with eval_mode(self._obs_normalizer), eval_mode(self._obs_privileges_normalizer):
-            return self._obs_normalizer(obs[0]), self._obs_privileges_normalizer(obs[1])
+            return self.normalize(obs)
 
     @torch.no_grad()
     def backward_map(self, obs: tuple[torch.Tensor]):
@@ -164,8 +170,11 @@ class FBModel(nn.Module):
     @torch.no_grad()
     def actor(self, obs: tuple[torch.Tensor], z: torch.Tensor, std: float):
         with eval_mode(self._obs_normalizer):
-            obs = self._obs_normalizer(obs[0])
-        obs = torch.reshape(obs, (obs.shape[0], -1))
+            _b, _n, _d = obs[0].shape
+            obs0 = torch.reshape(obs[0], (_b * _n, _d))
+            obs0 = self._obs_normalizer(obs0)
+            obs = torch.reshape(obs0, (_b, -1))
+
         return self._actor_(obs, z, std)
 
     def sample_z(self, size: int, device: str = "cpu") -> torch.Tensor:
@@ -280,6 +289,14 @@ class FBModel(nn.Module):
     def _discriminator(self, obs: torch.Tensor, z: torch.Tensor):
         obs = self._build_back_obs(obs)
         return self._discriminator_(obs, z)
+
+    def compute_logits(self, obs: torch.Tensor, z: torch.Tensor):
+        obs = self._build_back_obs(obs)
+        return self._discriminator_.compute_logits(obs, z)
+
+    def compute_reward(self, obs: torch.Tensor, z: torch.Tensor):
+        obs = self._build_back_obs(obs)
+        return self._discriminator_.compute_reward(obs, z)
 
     def _auxi_critic(self, obs: tuple[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
