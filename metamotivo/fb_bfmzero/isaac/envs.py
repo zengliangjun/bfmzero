@@ -56,6 +56,9 @@ class IsaacWarp:
                 entry_point_key="env_cfg_entry_point",
             )
 
+        if cfg.args_cli.proprioceptive_history_length is not None:
+            env_cfg.observations.policy.history_length = cfg.args_cli.proprioceptive_history_length
+
         envs = gym.make(cfg.args_cli.task, cfg=env_cfg, render_mode="rgb_array" if cfg.args_cli.video else None)
 
         # convert to single-agent instance if required by the RL algorithm

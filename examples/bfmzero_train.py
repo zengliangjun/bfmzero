@@ -23,6 +23,8 @@ parser.add_argument("--real-time", action="store_true", default=False, help="Run
 parser.add_argument("--debugs", action="store_true", default=False, help="Run in real-time, if possible.")
 parser.add_argument("--duration", type=int, default=2, help="Run in real-time, if possible.")
 
+
+parser.add_argument("--proprioceptive-history-length", type=int, default=None, help="Number of environments to simulate.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -114,6 +116,11 @@ if __name__ == "__main__":
 
     agent_cfg.train.grad_penalty_discriminator = 10.0
     agent_cfg.train.weight_decay_discriminator = 0.0
+
+    if args_cli.proprioceptive_history_length is not None:
+        agent_cfg.model.obs_history_horizon = args_cli.proprioceptive_history_length
+        cfg.motions_buffer.history_horizon = args_cli.proprioceptive_history_length
+
 
     work = workspace.Workspace(cfg, agent_cfg)
 
