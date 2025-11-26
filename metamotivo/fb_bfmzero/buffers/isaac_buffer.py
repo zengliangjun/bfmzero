@@ -23,6 +23,7 @@ class MotionBufferConfig():
     fps: int = 50
     seq_length: int = 8
     history_horizon: int = 4
+    slice_num_seconds: int = 4  # 4s
 
     prioritization: bool = False
     prioritization_min_val: float = 0.5
@@ -162,16 +163,25 @@ class MotionBuffer:
             del observations
             del privileges
             return
+        # slice data
+        num_frames = observations.shape[0]
+        slice_frames = self.config.fps  * self.config.slice_num_seconds
 
-        slices = observations.shape[0] - slice_length
-        items = MotionItems()
-        items.slices = slices
-        items.observations = observations
-        items.privileges = privileges
+        num_slices = num_frames // slice_frames + 1
 
-        self.storages[self.capacity] =items
-        self.trajectory_priorities.append(slices)
-        self.capacity += 1
+        for slices in range(num_slices):
+            end_idx = min((slices + 1) * slice_frames, num_frames)
+            start_idx = max(end_idx - slice_frames, 0)
+
+            slices = (end_idx - start_idx) - slice_length
+            items = MotionItems()
+            items.slices = slices
+            items.observations = observations[start_idx: end_idx].clone()
+            items.privileges = privileges[start_idx: end_idx].clone()
+
+            self.storages[self.capacity] =items
+            self.trajectory_priorities.append(slices)
+            self.capacity += 1
 
     def _load_trajectories(self):
         for root, dirs, files in os.walk(self.config.motions_root):
@@ -184,7 +194,6 @@ class MotionBuffer:
         self.trajectory_priorities = torch.tensor(self.trajectory_priorities, \
                                                   dtype= torch.float32, device = self.device)
 
-        self.trajectory_priorities = self.trajectory_priorities.sqrt()
         self.trajectory_priorities /= torch.sum(self.trajectory_priorities)
 
     def __len__(self) -> int:
