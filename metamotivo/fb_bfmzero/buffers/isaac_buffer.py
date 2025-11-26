@@ -48,6 +48,15 @@ class MotionBufferConfig():
             "feet_forces"
         ]
 
+        self.default_joint_pos = torch.tensor(
+            [[-0.3120, -0.3120,  0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.0000,
+          0.0000,  0.6690,  0.6690,  0.2000,  0.2000, -0.3630, -0.3630,  0.2000,
+         -0.2000,  0.0000,  0.0000,  0.0000,  0.0000,  0.6000,  0.6000,  0.0000,
+          0.0000,  0.0000,  0.0000,  0.0000,  0.0000]],
+            device=self.device,
+            dtype = torch.float32
+        )
+
     def make_buffer(self):
         return MotionBuffer(self)
 
@@ -123,8 +132,13 @@ class MotionBuffer:
 
         observations = []
         for key in self.config.observations_key:
-            observations.append(
-                torch.tensor(data[key], dtype=torch.float32, device=self.device))
+            if key == "joint_pos":
+                pose = torch.tensor(data[key], dtype=torch.float32, device=self.device) - \
+                       self.config.default_joint_pos
+                observations.append(pose)
+            else:
+                observations.append(
+                    torch.tensor(data[key], dtype=torch.float32, device=self.device))
 
         privileges = []
         for key in self.config.privileges_key:
@@ -239,6 +253,6 @@ class MotionBuffer:
 
 if __name__ == "__main__":
     cfg = MotionBufferConfig()
-    cfg.motions_root = "/workspace.data1/ISAACSIM45/MATA/data/SPLITDATA/motions/g1/tmpdata/"
+    cfg.motions_root = "/workspace/data2/VSCODE/MOTION/FBMODULES/data/SPLITDATA/motions/g1"
 
     cfg.make_buffer()

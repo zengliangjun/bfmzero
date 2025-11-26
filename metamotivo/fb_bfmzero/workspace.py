@@ -222,6 +222,10 @@ class Workspace:
             if step % self.cfg.checkpoint_every_steps == 0:
                 self.agent.save(osp.join(self.work_dir, "checkpoint"))
 
+            if step % (self.cfg.checkpoint_every_steps * 10) == 0:
+                replay_buffer["train"].save(osp.join(self.work_dir, "checkpoint", "replay_buffer.pth"))
+
             progb.update(1)
 
         self.agent.save(osp.join(self.work_dir, "checkpoint"))
+        replay_buffer["train"].save(osp.join(self.work_dir, "checkpoint", "replay_buffer.pth"))

@@ -7,6 +7,7 @@ import dataclasses
 import torch
 import torch.nn.functional as F
 from typing import Dict, Tuple
+import os.path as osp
 
 from .model import FBModel, config_from_dict
 from .model import Config as FBModelConfig
@@ -354,3 +355,9 @@ class FBAgent:
         model_folder = output_folder / "model"
         model_folder.mkdir(exist_ok=True)
         self._model.save(output_folder=str(model_folder))
+
+    def load(self, path: str):
+        path = osp.join(path, "model/model.safetensors")
+        safetensors.torch.load_model(self._model, path, device=self.device)
+        print(f"load   {path}")
+

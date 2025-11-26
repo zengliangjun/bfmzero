@@ -99,6 +99,26 @@ class DictBuffer:
         else:
             return extract_values(self.storage, torch.arange(0, len(self)))
 
+    def save(self, full_path_name: str):
+        items = {
+            "capacity" : self.capacity,
+            "device": self.device,
+            "idx" : self._idx,
+            "is_full" : self._is_full,
+            "storage" : self.storage
+        }
+        torch.save(items, full_path_name)
+
+    def load(self, full_path_name: str):
+        items = torch.load(full_path_name)
+
+        self.capacity = items["capacity"]
+        self.device = items["device"]
+        self._idx = items["idx"]
+        self._is_full = items["is_full"]
+        self.storage = items["storage"]
+
+
 
 def extract_values(d: Dict, idxs: List | torch.Tensor | np.ndarray) -> Dict:
     result = {}
