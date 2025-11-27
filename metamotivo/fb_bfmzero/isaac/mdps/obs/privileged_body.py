@@ -5,6 +5,9 @@ import torch
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, RigidObject
 
+
+from metamotivo.fb_bfmzero.isaac import isaac_utils
+
 def body_coms(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     '''
     rigid_body_mass = ObsTerm(
@@ -107,5 +110,5 @@ def local_body_quat(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg) -> torch.Te
     lb_quat = math_utils.quat_mul(inv_quat_w, body_quat_w)
     lb_quat = math_utils.normalize(lb_quat)
 
-    lb_mat = math_utils.matrix_from_quat(lb_quat)[..., :2]
-    return lb_mat.reshape(lb_mat.shape[0], -1)
+    return isaac_utils.quat_to_tan_norm_wxyz(lb_quat)
+

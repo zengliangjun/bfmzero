@@ -77,6 +77,7 @@ import isaaclab.utils.math as math_utils
 # Pre-defined configs
 ##
 from metamotivo.fb_bfmzero.isaac.robots.g1 import G1_CYLINDER_CFG
+from metamotivo.fb_bfmzero.isaac import isaac_utils
 
 
 @configclass
@@ -240,7 +241,6 @@ class MotionLoader:
             reset_flag = True
         return state, reset_flag
 
-
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, joint_names: list[str]):
     """Runs the simulation loop."""
     # Load motion
@@ -331,8 +331,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, joi
             lb_quat = math_utils.quat_mul(inv_quat_w, body_quat_w)
             lb_quat = math_utils.normalize(lb_quat)
 
-            lb_mat = math_utils.matrix_from_quat(lb_quat)[..., :2]
-            local_body_quat = lb_mat.reshape(lb_mat.shape[0], -1)
+            #lb_mat = math_utils.matrix_from_quat(lb_quat)[..., :2]
+            #local_body_quat = lb_mat.reshape(lb_mat.shape[0], -1)
+            local_body_quat = isaac_utils.quat_to_tan_norm_wxyz(lb_quat)
 
             # check if contact force is above threshold
             net_contact_forces = contact_sensors.data.net_forces_w_history  # N, T, B, 3
