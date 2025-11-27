@@ -112,7 +112,7 @@ class BFMAgent(FBcprAgent):
 
 
     @torch.no_grad()
-    def sample_mixed_z(self, train_goal: tuple[torch.Tensor], expert_encodings: torch.Tensor, *args, **kwargs):
+    def sample_mixed_z(self, train_goal: dict[torch.Tensor], expert_encodings: torch.Tensor, *args, **kwargs):
         z = self._model.sample_z(self.cfg.train.batch_size, device=self.device)
         p_goal = self.cfg.train.train_goal_ratio
         p_expert_asm = self.cfg.train.expert_asm_ratio
@@ -126,7 +126,9 @@ class BFMAgent(FBcprAgent):
         # zs obtained by encoding train goals
         perm = torch.randperm(self.cfg.train.batch_size, device=self.device)
         ################
-        train_goal = train_goal[0][perm], train_goal[1][perm]
+        for key, value in train_goal.items():
+            train_goal[key] = value[perm]
+
         goals = self._model._backward_map(train_goal)
 
         goals = self._model.project_z(goals)
@@ -142,16 +144,18 @@ class BFMAgent(FBcprAgent):
         expert_batch = replay_buffer["expert_slicer"].sample(self.cfg.train.batch_size)
         train_batch = replay_buffer["train"].sample(self.cfg.train.batch_size)
 
-        train_obs, train_privileges, train_action, train_z, \
-        train_next_obs, train_next_privileges, train_terminated, \
+        train_obs, train_privileges, train_obs_action, train_action, train_z, \
+        train_next_obs, train_next_privileges, train_next_obs_action, train_terminated, \
             train_rewards = (
             train_batch["observations"].to(self.device),
             train_batch["privileges"].to(self.device),
+            train_batch["history_action"].to(self.device),
             train_batch["action"].to(self.device),
             train_batch["z"].to(self.device),
 
             train_batch["next"]["observations"].to(self.device),
             train_batch["next"]["privileges"].to(self.device),
+            train_batch["next"]["history_action"].to(self.device),
             train_batch["next"]["terminated"].to(self.device),
             train_batch["next"]["rewards"].to(self.device),
         )
@@ -164,51 +168,68 @@ class BFMAgent(FBcprAgent):
             expert_batch["next"]["observations"].to(self.device),
             expert_batch["next"]["privileges"].to(self.device),
         )
+        train_status = {
+            "obs": train_obs,
+            "action": train_obs_action,
+            "privileges": train_privileges
+        }
+        train_next_status = {
+            "obs": train_next_obs,
+            "action": train_next_obs_action,
+            "privileges": train_next_privileges
+        }
+        expert_status = {
+            "obs": expert_obs,
+            "privileges": expert_privileges
+        }
+        expert_next_status = {
+            "obs": expert_next_obs,
+            "privileges": expert_next_privileges
+        }
+
+        actions = {
+            "action": train_action
+        }
+
         #
-        self._model.normalize((train_obs, train_privileges))
-        self._model.normalize((train_next_obs, train_next_privileges))
+        self._model.normalize(train_status)
+        self._model.normalize(train_next_status)
         ##
-        train_obs, train_privileges = self._model._normalize(
-                (train_obs, train_privileges) )
-        train_next_obs, train_next_privileges = self._model._normalize(
-                (train_next_obs,
-                train_next_privileges)
-            )
-        expert_obs, expert_privileges = self._model._normalize(
-                (expert_obs,
-                 expert_privileges)
-            )
-        expert_next_obs, expert_next_privileges = self._model._normalize(
-                (expert_next_obs,
-                 expert_next_privileges)
-            )
+        train_status = self._model._normalize(train_status)
+        train_next_status = self._model._normalize(train_next_status)
+        expert_status = self._model._normalize(expert_status)
+        expert_next_status = self._model._normalize(expert_next_status)
+        actions = self._model._normalize(actions)
+        train_action = actions["action"]
+
+        # action
         ##
         torch.compiler.cudagraph_mark_step_begin()
-        expert_z = self.encode_expert(next_obs=[expert_next_obs, expert_next_privileges])
+        expert_z = self.encode_expert(next_obs=expert_status)
 
 
         # train the discriminator
         grad_penalty = self.cfg.train.grad_penalty_discriminator if self.cfg.train.grad_penalty_discriminator > 0 else None
         metrics = self.update_discriminator(
-            expert_obs=[expert_obs, expert_privileges],
+            expert_obs=expert_status,
             expert_z=expert_z,
-            train_obs=[train_obs, train_privileges],
+            train_obs=train_status,
             train_z=train_z,
             grad_penalty=grad_penalty,
         )
 
         metrics.update(
                 self.update_auxi_critic(
-                    obs=[train_obs, train_privileges],
+                    obs=train_status,
                     action=train_action,
                     discount=discount,
-                    next_obs=[train_next_obs, train_next_privileges],
+                    next_obs=train_next_status,
                     z=train_z,
                     reward=train_rewards
             )
         )
 
-        z = self.sample_mixed_z(train_goal=[train_next_obs, train_next_privileges], expert_encodings=expert_z).clone()
+        z = self.sample_mixed_z(train_goal=train_next_status, expert_encodings=expert_z).clone()
         self.z_buffer.add(z)
 
         if self.cfg.train.relabel_ratio is not None:
@@ -220,11 +241,11 @@ class BFMAgent(FBcprAgent):
 
         metrics.update(
             self.update_fb(
-                obs=[train_obs, train_privileges],
+                obs=train_status,
                 action=train_action,
                 discount=discount,
-                next_obs=[train_next_obs, train_next_privileges],
-                goal=[train_next_obs, train_next_privileges],
+                next_obs=train_next_status,
+                goal=train_next_status,
                 z=train_z,
                 q_loss_coef=q_loss_coef,
                 clip_grad_norm=clip_grad_norm,
@@ -232,16 +253,16 @@ class BFMAgent(FBcprAgent):
         )
         metrics.update(
             self.update_critic(
-                obs=[train_obs, train_privileges],
+                obs=train_status,
                 action=train_action,
                 discount=discount,
-                next_obs=[train_next_obs, train_next_privileges],
+                next_obs=train_next_status,
                 z=train_z,
             )
         )
         metrics.update(
             self.update_actor(
-                obs=[train_obs, train_privileges],
+                obs=train_status,
                 action=train_action,
                 z=train_z,
                 clip_grad_norm=clip_grad_norm,

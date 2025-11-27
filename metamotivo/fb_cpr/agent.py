@@ -252,7 +252,7 @@ class FBcprAgent(FBAgent):
         if hasattr(self._model._discriminator, "compute_logits"):
             compute_logits = self._model._discriminator.compute_logits
         else:
-            compute_logits = self._model._discriminator_.compute_logits
+            compute_logits = self._model._compute_logits
 
         d_interpolates = compute_logits(
             interpolates[:, 0 : real_obs.shape[1]], interpolates[:, real_obs.shape[1] :]
@@ -280,7 +280,7 @@ class FBcprAgent(FBAgent):
         if hasattr(self._model._discriminator, "compute_logits"):
             compute_logits = self._model._discriminator.compute_logits
         else:
-            compute_logits = self._model.compute_logits
+            compute_logits = self._model._compute_logits
 
         expert_logits = compute_logits(obs=expert_obs, z=expert_z)
         unlabeled_logits = compute_logits(obs=train_obs, z=train_z)
@@ -322,7 +322,7 @@ class FBcprAgent(FBAgent):
             if hasattr(self._model._discriminator, "compute_reward"):
                 compute_reward = self._model._discriminator.compute_reward
             else:
-                compute_reward = self._model.compute_reward
+                compute_reward = self._model._compute_reward
 
             reward = compute_reward(obs=obs, z=z)
             dist = self._model._actor(next_obs, z, self._model.cfg.actor_std)

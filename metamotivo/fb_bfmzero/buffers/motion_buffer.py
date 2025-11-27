@@ -32,6 +32,7 @@ class MotionBufferConfig():
 
 
     def __post_init__(self):
+        '''
         self.observations_key = ["base_ang_vel", "gravity", "joint_pos" ,"joint_vel"]
         self.privileges_key = [
             "base_lin_vel",
@@ -48,6 +49,8 @@ class MotionBufferConfig():
             "feet_status",
             "feet_forces"
         ]
+        '''
+        ## setup with workspace.py
 
         self.default_joint_pos = torch.tensor(
             [[-0.3120, -0.3120,  0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.0000,
@@ -71,11 +74,11 @@ class MotionItems:
         timeidx = torch.randint(0, self.slices, (1,))
 
         historys = []
-        for idx in range(cfg.history_horizon):
+        for idx in range(cfg.history_horizon + 1):
             historys.append(timeidx + idx)
 
         history = torch.cat(historys)
-        current = timeidx + cfg.history_horizon - 1
+        current = timeidx + cfg.history_horizon#  - 1
         # next = timeidx + cfg.history_horizon
 
         history_slices = []
@@ -92,12 +95,12 @@ class MotionItems:
         # next_slices = torch.cat(next_slices, dim = 0)
 
         observations = self.observations[history_slices]
-        observations = torch.reshape(observations, (cfg.seq_length, cfg.history_horizon, -1))
+        observations = torch.reshape(observations, (cfg.seq_length, cfg.history_horizon + 1, -1))
         # history_slices = torch.reshape(history_slices, (cfg.seq_length, cfg.history_horizon))
         privileges = self.privileges[current_slices]
 
         next_observations = self.observations[history_slices + 1]
-        next_observations = torch.reshape(next_observations, (cfg.seq_length, cfg.history_horizon, -1))
+        next_observations = torch.reshape(next_observations, (cfg.seq_length, cfg.history_horizon + 1, -1))
         next_privileges = self.privileges[current_slices + 1]
 
         output["observations"].append(observations)
@@ -143,8 +146,11 @@ class MotionBuffer:
 
         privileges = []
         for key in self.config.privileges_key:
+            value: np.ndarray = data[key]
+            if len(value.shape) == 3:
+                value = value.reshape((value.shape[0], -1))
             privileges.append(
-                torch.tensor(data[key], dtype=torch.float32, device=self.device))
+                torch.tensor(value, dtype=torch.float32, device=self.device))
 
 
         observations = torch.cat(observations, dim = -1)

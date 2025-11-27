@@ -121,17 +121,8 @@ class ObservationsCfg:
         gravity = ObsTerm(func=mdp.projected_gravity)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
-        # actions = ObsTerm(func=mdp.last_action)
+        history_action = ObsTerm(func=mdp.last_action)
 
-        history_length: int = 4
-        flatten_history_dim: int = False
-
-        def __post_init__(self):
-            self.enable_corruption = True
-            self.concatenate_terms = False
-
-    @configclass
-    class PrivilegedCfg(ObsGroup):
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
         base_pos_z = ObsTerm(func=mdp.base_pos_z)
 
@@ -173,9 +164,7 @@ class ObservationsCfg:
             self.enable_corruption = True
             self.concatenate_terms = False
 
-    # observation groups
     policy: PolicyCfg = PolicyCfg()
-    critic: PrivilegedCfg = PrivilegedCfg()
 
 
 @configclass

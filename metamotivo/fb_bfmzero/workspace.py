@@ -16,13 +16,18 @@ import torch
 from metamotivo.buffers.buffers import DictBuffer
 from metamotivo.fb_bfmzero import agent
 from metamotivo.fb_bfmzero.logger import logger
-from metamotivo.fb_bfmzero.buffers import isaac_buffer
+from metamotivo.fb_bfmzero.buffers import motion_buffer, replay_buffer as replay
+
+from metamotivo.fb_bfmzero.collect import history_action_collect
+from metamotivo.fb_bfmzero.isaac import configs
 
 @dataclasses.dataclass
 class TrainConfig:
     name: str = "fb_bfmzero"
     seed: int = 0
-    motions_buffer: isaac_buffer.MotionBufferConfig = isaac_buffer.MotionBufferConfig()
+    motions_buffer: motion_buffer.MotionBufferConfig = motion_buffer.MotionBufferConfig()
+    replay_buffer: replay.ReplayBuffer = replay.ReplayBuffer(capacity = 0)
+    collect_buffer: history_action_collect.CollectConfig = history_action_collect.CollectConfig()
 
     buffer_size: int = 5_000_000
 
@@ -53,6 +58,38 @@ class TrainConfig:
     # eval
     evaluate: bool = False
     eval_every_steps: int = 1_000_000
+
+
+    def __post_init__(self):
+        self.motions_buffer.motions_root = configs.motions_root
+        self.motions_buffer.observations_key = ["base_ang_vel", "gravity", "joint_pos" ,"joint_vel"]
+        self.motions_buffer.privileges_key = [
+            "base_lin_vel",
+            "base_pos_z",
+            "local_body_lin_vel",
+            "local_body_ang_vel",
+            "local_body_pos",
+            "local_body_quat",
+            "joint_acc",
+            "joint_stiffness",
+            "joint_damping",
+            "friction_coeff",
+            "torques",
+            "feet_status",
+            "feet_forces"
+        ]
+
+        self.collect_buffer.observations_key = self.motions_buffer.observations_key
+        self.collect_buffer.privileges_key = self.motions_buffer.privileges_key
+        self.collect_buffer.history_horizon = self.motions_buffer.history_horizon
+        self.collect_buffer.action_key = "history_action"
+
+        self.replay_buffer.observations_key = self.collect_buffer.observations_key
+        self.replay_buffer.privileges_key = self.collect_buffer.privileges_key
+        self.replay_buffer.action_key = self.collect_buffer.action_key
+
+        self.replay_buffer.capacity=self.buffer_size 
+        self.replay_buffer.device=self.buffer_device
 
 
 def set_seed_everywhere(seed):
@@ -94,74 +131,17 @@ class Workspace:
         with open(osp.join(self.work_dir, "agent_config.json"), "w") as f:
             json.dump(dataclasses.asdict(self.agent_cfg), f, indent=4)
 
-    @torch.no_grad()
-    def _train_collect_one_step(self, env, context_items):
-        step = context_items['step']
-        context_z = context_items['context_z']
-        done = context_items['done']
-        observations = context_items['observations']
-        privileges = context_items['privileges']
-
-        step_count = env.timestep()[:, None].to(self.agent.device)
-        context_z = self.agent.maybe_update_rollout_context(z=context_z, step_count=step_count)
-
-        if step < self.cfg.seed_steps:
-            action = env.sample_action()
-        else:
-            # this works in inference mode
-            observations = observations.to(self.agent.device)
-            privileges = privileges.to(self.agent.device)
-
-            action = self.agent.act(obs=(observations, privileges), z=context_z, mean=False)
-
-        next_obs, rewards, next_dones, next_infos = env.step(action)
-
-        ## update context
-        context_items['context_z'] = context_z
-        context_items['done'] = next_dones
-        context_items['observations'] = next_infos['observations']
-        context_items['privileges'] = next_infos['privileges']
-
-        if done.shape[0] == torch.sum(done.float()):
-            return None
-
-        indexes = ~done
-        data = {
-            "observations": observations[indexes],
-            "privileges": privileges[indexes],
-            "action": action[indexes],
-            "z": context_z[indexes],
-            "step_count": step_count[indexes],
-            "next": {
-                "observations": next_infos['observations'][indexes],
-                "privileges": next_infos['privileges'][indexes],
-                "rewards": rewards[indexes][:, None],
-                "terminated": next_infos["terminated"][indexes][:, None],
-                "truncated": next_infos["truncated"][indexes][:, None]
-            },
-        }
-        return data
-
-
     def train(self, env):
         self.train_online(env)
 
     def train_online(self, env) -> None:
         replay_buffer = {
-            "train": DictBuffer(capacity=self.cfg.buffer_size, device=self.cfg.buffer_device),
+            "train": self.cfg.replay_buffer,
             "expert_slicer": self.cfg.motions_buffer.make_buffer(),
         }
 
-
-        obs, extras = env.reset()
-        done = torch.zeros(self.agent_cfg.train.batch_size, dtype=torch.bool)
-
-        collect_context = {
-                "observations": extras["observations"],
-                "privileges": extras["privileges"],
-                'done': done,
-                "context_z": None
-            }
+        collect = history_action_collect.CollectContext(self.cfg.collect_buffer)
+        collect.reset(env)
 
         start_time = time.time()
         fps_start_time = time.time()
@@ -172,10 +152,7 @@ class Workspace:
         for step in range(1, self.cfg.max_steps + 1):
 
             for _ in range(self.cfg.one_step_collect_iters):
-                collect_context['step'] = step
-                data = self._train_collect_one_step(env, collect_context)
-                if data is not None:
-                    replay_buffer["train"].extend(data)
+                collect.collect_step(step, env, self.agent, replay_buffer["train"])
 
             if step <= self.cfg.seed_steps:
                 continue

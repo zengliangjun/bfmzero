@@ -70,7 +70,43 @@ class TrainConfig(workspace.TrainConfig):
 @dataclasses.dataclass
 class BFMConfig(agent.Config):
     def __post_init__(self):
-        pass
+
+        self.train.lr_f = 3e-4
+        self.train.lr_b = 1e-5
+        self.train.lr_actor = 3e-4
+        self.train.lr_discriminator = 1e-5
+        self.train.lr_critic = 3e-4
+        self.train.lr_auxi_critic = 3e-4
+
+        self.train.fb_target_tau = 0.01
+        self.train.critic_target_tau = 0.005
+        self.train.auxi_critic_target_tau = 0.005
+
+        self.train.fb_pessimism_penalty = 0.0
+        self.train.actor_pessimism_penalty = 0.5
+        self.train.critic_pessimism_penalty = 0.5
+        self.train.auxi_critic_pessimism_penalty = 0.5
+
+        self.train.train_goal_ratio = 0.2
+        self.train.expert_asm_ratio = 0.6
+        self.train.relabel_ratio = 0.8
+
+        self.train.use_mix_rollout = True
+        self.train.ortho_coef = 100
+        self.train.q_loss_coef = 0.1
+
+        self.train.scale_reg = True
+        self.train.reg_coeff = 0.05
+        self.train.auxi_reg_coeff = 0.02
+
+        self.train.stddev_clip = 0.3
+        self.train.batch_size = 1024
+        self.train.discount = 0.98
+        self.train.update_z_every_step = 150
+        self.train.z_buffer_size = 10000
+
+        self.train.grad_penalty_discriminator = 10.0
+        self.train.weight_decay_discriminator = 0.0
 
 
 if __name__ == "__main__":
@@ -80,47 +116,9 @@ if __name__ == "__main__":
     agent_cfg: BFMConfig = BFMConfig()
     agent_cfg.model.device = cfg.device
 
-    agent_cfg.train.lr_f = 3e-4
-    agent_cfg.train.lr_b = 1e-5
-    agent_cfg.train.lr_actor = 3e-4
-    agent_cfg.train.lr_discriminator = 1e-5
-    agent_cfg.train.lr_critic = 3e-4
-    agent_cfg.train.lr_auxi_critic = 3e-4
-
-    agent_cfg.train.fb_target_tau = 0.01
-    agent_cfg.train.critic_target_tau = 0.005
-    agent_cfg.train.auxi_critic_target_tau = 0.005
-
-    agent_cfg.train.fb_pessimism_penalty = 0.0
-    agent_cfg.train.actor_pessimism_penalty = 0.5
-    agent_cfg.train.critic_pessimism_penalty = 0.5
-    agent_cfg.train.auxi_critic_pessimism_penalty = 0.5
-
-    agent_cfg.train.train_goal_ratio = 0.2
-    agent_cfg.train.expert_asm_ratio = 0.6
-    agent_cfg.train.relabel_ratio = 0.8
-
-    agent_cfg.train.use_mix_rollout = True
-    agent_cfg.train.ortho_coef = 100
-    agent_cfg.train.q_loss_coef = 0.1
-
-    agent_cfg.train.scale_reg = True
-    agent_cfg.train.reg_coeff = 0.05
-    agent_cfg.train.auxi_reg_coeff = 0.02
-
-    agent_cfg.train.stddev_clip = 0.3
-    agent_cfg.train.batch_size = 1024
-    agent_cfg.train.discount = 0.98
-    agent_cfg.train.update_z_every_step = 150
-    agent_cfg.train.z_buffer_size = 10000
-
-    agent_cfg.train.grad_penalty_discriminator = 10.0
-    agent_cfg.train.weight_decay_discriminator = 0.0
-
     if args_cli.proprioceptive_history_length is not None:
         agent_cfg.model.obs_history_horizon = args_cli.proprioceptive_history_length
         cfg.motions_buffer.history_horizon = args_cli.proprioceptive_history_length
-
 
     work = workspace.Workspace(cfg, agent_cfg)
 

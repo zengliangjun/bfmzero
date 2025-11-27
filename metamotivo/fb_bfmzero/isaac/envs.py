@@ -19,27 +19,6 @@ class IsaacConfig():
     workdir: Optional[str] = None
     args_cli: Optional[Any] = None
 
-    observations_key : list[str] = dataclasses.field(default_factory=list)
-    privileges_key : list[str] = dataclasses.field(default_factory=list)
-
-    def __post_init__(self):
-        self.observations_key = ["base_ang_vel", "gravity", "joint_pos" ,"joint_vel"]
-        self.privileges_key = [
-            "base_lin_vel",
-            "base_pos_z",
-            "local_body_lin_vel",
-            "local_body_ang_vel",
-            "local_body_pos",
-            "local_body_quat",
-            "joint_acc",
-            "joint_stiffness",
-            "joint_damping",
-            "friction_coeff",
-            "torques",
-            "feet_status",
-            "feet_forces"
-        ]
-
     def make_env(self):
         return IsaacWarp(self)
 
@@ -55,9 +34,6 @@ class IsaacWarp:
                 use_fabric=not cfg.args_cli.disable_fabric,
                 entry_point_key="env_cfg_entry_point",
             )
-
-        if cfg.args_cli.proprioceptive_history_length is not None:
-            env_cfg.observations.policy.history_length = cfg.args_cli.proprioceptive_history_length
 
         envs = gym.make(cfg.args_cli.task, cfg=env_cfg, render_mode="rgb_array" if cfg.args_cli.video else None)
 
@@ -83,30 +59,15 @@ class IsaacWarp:
 
     def _calcute_objs(self, items):
         data = items["policy"]
-        observations = []
-        for key in self.config.observations_key:
-            observations.append(data[key].detach().clone())
-
-
-        data = items["critic"]
-        privileges = []
-        for key in self.config.privileges_key:
-            privileges.append(data[key].detach().clone())
-
-
-        observations = torch.cat(observations, dim = -1)
-        privileges = torch.cat(privileges, dim = -1)
-
-        objs = {
-            "observations": observations,
-            "privileges": privileges
-        }
-        return objs
+        observations = {}
+        for key, value in data.items():
+            observations[key] = value.detach().clone()
+        return observations
 
 
     def reset(self) -> Tuple[torch.Tensor, Dict[str, object]]:
         obs, infos = self.envs.get_observations()
-        infos = self._calcute_objs(infos['observations'])
+        obs = self._calcute_objs(infos['observations'])
         return obs, infos
 
     def timestep(self) -> torch.Tensor:
@@ -133,9 +94,9 @@ class IsaacWarp:
         # compute dones for compatibility with RSL-RL
         dones = (terminated | truncated).to(dtype=torch.long)
         # move extra observations to the extras dict
-        infos = self._calcute_objs(obs_dict)
-        infos["terminated"] = terminated
-        infos["truncated"] = truncated
+        obs_dict = self._calcute_objs(obs_dict)
+        obs_dict["terminated"] = terminated
+        obs_dict["truncated"] = truncated
 
         # return the step information
         return obs_dict, rewards, dones, infos
