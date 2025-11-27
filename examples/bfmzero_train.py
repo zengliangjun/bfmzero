@@ -62,10 +62,7 @@ from metamotivo.fb_bfmzero import agent
 class TrainConfig(workspace.TrainConfig):
     def __post_init__(self):
         self.name = "isaac_bfmzero"
-        self.motions_buffer.motions_root = "/workspace/data2/VSCODE/MOTION/MATA/data/SPLITDATA/"
-
-        self.compile = False
-        self.cudagraphs = False
+        super().__post_init__()
 
 @dataclasses.dataclass
 class BFMConfig(agent.Config):
@@ -114,11 +111,12 @@ if __name__ == "__main__":
     cfg: TrainConfig = TrainConfig()
 
     agent_cfg: BFMConfig = BFMConfig()
-    agent_cfg.model.device = cfg.device
+    agent_cfg.model.device = "cuda:0"
 
     if args_cli.proprioceptive_history_length is not None:
         agent_cfg.model.obs_history_horizon = args_cli.proprioceptive_history_length
         cfg.motions_buffer.history_horizon = args_cli.proprioceptive_history_length
+        cfg.collect_buffer.history_horizon = args_cli.proprioceptive_history_length
 
     work = workspace.Workspace(cfg, agent_cfg)
 

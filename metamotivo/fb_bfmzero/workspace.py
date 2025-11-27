@@ -49,10 +49,6 @@ class TrainConfig:
     prioritization_max_val: float = 5
     prioritization_scale: float = 2
 
-    # misc
-    compile: bool = False
-    cudagraphs: bool = False
-    device: str = "cuda"
     buffer_device: str = "cpu"
 
     # eval
@@ -88,7 +84,7 @@ class TrainConfig:
         self.replay_buffer.privileges_key = self.collect_buffer.privileges_key
         self.replay_buffer.action_key = self.collect_buffer.action_key
 
-        self.replay_buffer.capacity=self.buffer_size 
+        self.replay_buffer.capacity=self.buffer_size
         self.replay_buffer.device=self.buffer_device
 
 
