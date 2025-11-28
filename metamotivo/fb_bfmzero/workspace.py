@@ -3,6 +3,7 @@ import dataclasses
 import json
 import random
 import time
+import math
 import numpy as np
 
 from tqdm import tqdm
@@ -11,7 +12,6 @@ import os
 import os.path as osp
 from loguru import logger as ulogger
 import torch
-
 
 from metamotivo.buffers.buffers import DictBuffer
 from metamotivo.fb_bfmzero import agent
@@ -161,6 +161,10 @@ class Workspace:
                 else:
                     num_metrics_updates += 1
                     total_metrics = {k: total_metrics[k] + metrics[k] for k in metrics.keys()}
+
+            curriculum_progress = min(1.0, math.sqrt(step * 1.2 / self.cfg.max_steps))
+            if hasattr(env, 'update_curriculum'):
+                env.update_curriculum(curriculum_progress)
 
             if step % self.cfg.log_every_steps == 0 and total_metrics is not None:
                 logger_dict = {}

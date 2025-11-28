@@ -106,3 +106,8 @@ class IsaacWarp:
 
     def update_priorities(self, items):
         pass
+
+    def update_curriculum(self, progress: float):
+        """更新课程学习进度"""
+        self.env_cfg.events.gravity_curriculum.params["curriculum_progress"] = progress
+

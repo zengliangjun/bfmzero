@@ -29,6 +29,7 @@ from metamotivo.fb_bfmzero.isaac import configs as envs_configs
 from metamotivo.fb_bfmzero.isaac.mdps.rewards import foot
 
 from metamotivo.fb_bfmzero.isaac.robots import g1
+from metamotivo.fb_bfmzero.isaac.mdps.events import gravity_curriculum
 from metamotivo.fb_bfmzero.isaac.mdps.events import events as mdp_events
 from metamotivo.fb_bfmzero.isaac.mdps.events import motion_reset
 from metamotivo.fb_bfmzero.isaac.mdps.obs import privileged
@@ -220,6 +221,15 @@ class EventCfg:
         },
     )
 
+    gravity_curriculum = EventTerm(
+        func=gravity_curriculum.randomize_gravity_curriculum,
+        mode="reset",
+        params={
+            "gravity_range": (-9.81, -2.0),  # 根据课程进度动态调整
+            "curriculum_progress": 0.0  # 从训练循环传入
+        },
+    )
+
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
@@ -277,10 +287,8 @@ class TerminationsCfg:
 
 @configclass
 class CurriculumCfg:
-    """Curriculum terms for the MDP."""
+    """课程学习配置"""
     pass
-
-
 ##
 # Environment configuration
 ##
