@@ -80,7 +80,8 @@ def run_simulator():
     """Runs the simulation loop."""
     # Load motion
     motion = MotionLoader(
-        motion_file="/workspace/ISAACSIM45ENVS/META/humenv/data_preparation/humenv_amass/0-ACCAD_Female1General_c3d_A7-crouch_poses.hdf5",
+        #motion_file="/workspace/ISAACSIM45ENVS/META/humenv/data_preparation/humenv_amass/0-ACCAD_Female1General_c3d_A2-Sway_poses.hdf5",
+        motion_file="/workspace/ISAACSIM45ENVS/META/humenv/data_preparation/humenv_amass/0-ACCAD_Female1Running_c3d_C3-Run_poses.hdf5",
         input_fps=30,
         device=humanoidverse_task.device,
     )
