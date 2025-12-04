@@ -36,6 +36,9 @@ robot:
                     'right_wrist_roll_joint', 'right_wrist_pitch_joint', 'right_wrist_yaw_joint']
   lower_dof_names: ['left_hip_pitch_joint', 'left_hip_roll_joint', 'left_hip_yaw_joint', 'left_knee_joint', 'left_ankle_pitch_joint', 'left_ankle_roll_joint',
                     'right_hip_pitch_joint', 'right_hip_roll_joint', 'right_hip_yaw_joint', 'right_knee_joint', 'right_ankle_pitch_joint', 'right_ankle_roll_joint']
+
+  dof_ankle_roll_names: ['left_ankle_roll_joint', 'right_ankle_roll_joint']
+
   dof_pos_lower_limit_list: [-2.5307, -0.5236, -2.7576, -0.087267, -0.87267, -0.2618,
                              -2.5307, -2.9671, -2.7576, -0.087267, -0.87267, -0.2618,
                              -2.618, -0.52, -0.52,
@@ -91,9 +94,16 @@ robot:
                 'right_shoulder_pitch_link', 'right_shoulder_roll_link', 'right_shoulder_yaw_link', 'right_elbow_link',
                 'right_wrist_roll_link', 'right_wrist_pitch_link', 'right_wrist_yaw_link']
 
-
   terminate_after_contacts_on : ["pelvis", "shoulder", "hip"]
-  penalize_contacts_on: ["pelvis", "shoulder", "hip"]
+  penalize_contacts_on: ['pelvis',
+                      'left_hip_pitch_link', 'left_hip_roll_link', 'left_hip_yaw_link', 'left_knee_link', 'left_ankle_pitch_link',
+                      'right_hip_pitch_link', 'right_hip_roll_link', 'right_hip_yaw_link', 'right_knee_link', 'right_ankle_pitch_link',
+                      'waist_yaw_link', 'waist_roll_link', 'torso_link',
+                      'left_shoulder_pitch_link', 'left_shoulder_roll_link', 'left_shoulder_yaw_link', 'left_elbow_link',
+                      'left_wrist_roll_link', 'left_wrist_pitch_link', 'left_wrist_yaw_link',
+                      'right_shoulder_pitch_link', 'right_shoulder_roll_link', 'right_shoulder_yaw_link', 'right_elbow_link',
+                      'right_wrist_roll_link', 'right_wrist_pitch_link', 'right_wrist_yaw_link']
+
   init_state:
     pos: [0.0, 0.0, 0.8] # x,y,z [m]
     rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]

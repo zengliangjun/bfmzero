@@ -56,10 +56,10 @@ obs:
     local_body_vel: 0.0,
     local_body_ang_vel: 0.0,
 
-    base_ang_vel: 0,
-    projected_gravity: 0,
-    dof_pos: 0,
-    dof_vel: 0,
+    base_ang_vel: 0.05,
+    projected_gravity: 0.05,
+    dof_pos: 0.01,
+    dof_vel: 0.5,
     actions: 0,
 
     history_obs: 0,

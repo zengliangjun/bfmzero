@@ -104,15 +104,15 @@ def run_simulator(input_files, input_joint_ids, base_dir, out_dir):
         out_file = file.replace(base_dir, out_dir)
         out_file = out_file.replace("csv", "pth")
 
-        out_dir = osp.dirname(out_file)
-        if not osp.exists(out_dir):
-            os.makedirs(out_dir)
+        out_full_dir = osp.dirname(out_file)
+        if not osp.exists(out_full_dir):
+            os.makedirs(out_full_dir)
 
         run_motion(motion, input_joint_ids, out_file)
 
 if __name__ == "__main__":
 
-    input_dir = "/workspace/data/csv/g1/LAFAN1_Retargeting_Dataset/dance1_subject1.csv"
+    input_dir = "/workspace/data/csv/g1/LAFAN1_Retargeting_Dataset/"
     base_dir = "/workspace/data/csv/"
     out_dir = "/workspace/data/motions/"
 

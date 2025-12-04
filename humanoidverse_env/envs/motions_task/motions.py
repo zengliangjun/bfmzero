@@ -8,6 +8,11 @@ class MotionsTask(LeggedRobotBase):
     def __init__(self, config, device):
         super().__init__(config, device)
 
+    def _setup_robot_body_indices(self):
+        super()._setup_robot_body_indices()
+        if hasattr(self.config.robot, "dof_ankle_roll_names"):
+            self.ankle_roll_indices = [self.dof_names.index(dof) for dof in self.config.robot.dof_ankle_roll_names]
+
     ######################### for motion play #########################
     def get_motion_joint(self, joint_names: list):
         joint_ids = []
@@ -108,7 +113,6 @@ class MotionsTask(LeggedRobotBase):
             body_ang_vel_w = self.simulator._rigid_body_ang_vel
 
         body_size = body_ang_vel_w.shape[1]
-
         quats = torch.repeat_interleave(self.base_quat[:, None, :], body_size, dim = 1)
         quats = torch.reshape(quats, (-1, 4))
         body_ang_vel_w = torch.reshape(body_ang_vel_w, (-1, 3))
@@ -119,7 +123,6 @@ class MotionsTask(LeggedRobotBase):
     def _get_obs_history_obs(self,):
         assert "history_obs" in self.config.obs.obs_auxiliary.keys()
         history_config = self.config.obs.obs_auxiliary['history_obs']
-        history_key_list = history_config.keys()
         history_tensors = []
         for key in sorted(history_config.keys()):
             history_length = history_config[key]
@@ -131,7 +134,6 @@ class MotionsTask(LeggedRobotBase):
     def _get_obs_history_actions(self,):
         assert "history_actions" in self.config.obs.obs_auxiliary.keys()
         history_config = self.config.obs.obs_auxiliary['history_actions']
-        history_key_list = history_config.keys()
         history_tensors = []
         for key in sorted(history_config.keys()):
             history_length = history_config[key]
@@ -139,7 +141,24 @@ class MotionsTask(LeggedRobotBase):
             # history_tensor = history_tensor.reshape(history_tensor.shape[0], -1)  # Shape: [4096, history_length*obs_dim]
             history_tensors.append(history_tensor)
         return torch.cat(history_tensors, dim=-1)
-    ######################### 2 motion_joint_ids #########################
+
+    ######################### REWARD #########################
+    def _reward_penalty_ankle_roll(self):
+        # Penalize dof positions too close to the limit
+        diff = self.simulator.dof_pos[:, self.ankle_roll_indices] - self.default_dof_pos[:, self.ankle_roll_indices]
+        return torch.sum(diff, dim=1)
+
+    def _reward_penalty_contact(self):
+        contacted = torch.norm(self.simulator.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 1
+        return torch.sum(contacted, dim=1)
+
+    def _reward_penalty_feet_ori(self):
+        left_quat = self.simulator._rigid_body_rot[:, self.feet_indices[0]]
+        left_gravity = quat_rotate_inverse(left_quat, self.gravity_vec)
+        right_quat = self.simulator._rigid_body_rot[:, self.feet_indices[1]]
+        right_gravity = quat_rotate_inverse(right_quat, self.gravity_vec)
+        return torch.sum(torch.square(left_gravity[:, :2]), dim=1)**0.5 + torch.sum(torch.square(right_gravity[:, :2]), dim=1)**0.5
+
 
 @torch.jit.script
 def quat_to_tan_norm_xyzw(q):
