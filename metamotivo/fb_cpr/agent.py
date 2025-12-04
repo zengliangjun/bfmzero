@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-from typing import Dict
+from typing import Dict, Union
 
 import torch
 import torch.nn.functional as F
@@ -31,7 +31,7 @@ class TrainConfig(FBTrainConfig):
     # - the remaining fraction from the uniform distribution
     expert_asm_ratio: float = 0
     # a fraction of 'relabel_ratio' transitions in each mini-batch are relabeled with a z sampled from the above distribution
-    relabel_ratio: float | None = 1
+    relabel_ratio: Union[float, None] = 1
     grad_penalty_discriminator: float = 10.0
     weight_decay_discriminator: float = 0.0
 
@@ -274,7 +274,7 @@ class FBcprAgent(FBAgent):
         expert_z: torch.Tensor,
         train_obs: torch.Tensor,
         train_z: torch.Tensor,
-        grad_penalty: float | None,
+        grad_penalty: Union[float, None],
     ) -> Dict[str, torch.Tensor]:
 
         if hasattr(self._model._discriminator, "compute_logits"):
@@ -357,7 +357,7 @@ class FBcprAgent(FBAgent):
         obs: torch.Tensor,
         action: torch.Tensor,
         z: torch.Tensor,
-        clip_grad_norm: float | None,
+        clip_grad_norm: Union[float, None],
     ) -> Dict[str, torch.Tensor]:
         dist = self._model._actor(obs, z, self._model.cfg.actor_std)
         action = dist.sample(clip=self.cfg.train.stddev_clip)

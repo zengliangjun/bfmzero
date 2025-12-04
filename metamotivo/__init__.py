@@ -4,16 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 import torch
 import json
 import safetensors.torch
 
 
-def load_model(path: str, device: str | None, cls: Any):
+def load_model(path: str, device: Union[str, None], cls: Any):
     model_dir = Path(path)
     with (model_dir / "config.json").open() as f:
         loaded_config = json.load(f)

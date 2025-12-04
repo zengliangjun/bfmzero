@@ -10,7 +10,7 @@ from safetensors.torch import save_model as safetensors_save_model
 import json
 import math
 import numpy as np
-
+from typing import Union, Tuple, Dict
 
 from ..nn_models import build_forward, build_backward, build_discriminator, build_actor, eval_mode
 from .. import config_from_dict, load_model
@@ -128,14 +128,8 @@ class FBModel(nn.Module):
         self._target_critic_ = copy.deepcopy(self._critic_)
         self._target_auxi_critic_ = copy.deepcopy(self._auxi_critic_)
 
-    def to(self, *args, **kwargs):
-        device, _, _, _ = torch._C._nn._parse_to(*args, **kwargs)
-        if device is not None:
-            self.cfg.device = device.type  # type: ignore
-        return super().to(*args, **kwargs)
-
     @classmethod
-    def load(cls, path: str, device: str | None = None):
+    def load(cls, path: str, device: Union[str, None] = None):
         return load_model(path, device, cls=cls)
 
     def save(self, output_folder: str) -> None:
@@ -176,7 +170,7 @@ class FBModel(nn.Module):
         return out
 
     @torch.no_grad()
-    def _normalize(self, obs: tuple[torch.Tensor]):
+    def _normalize(self, obs: Tuple[torch.Tensor]):
         with eval_mode(self._obs_normalizer), \
             eval_mode(self._action_normalizer), \
             eval_mode(self._obs_privileges_normalizer):
@@ -184,37 +178,37 @@ class FBModel(nn.Module):
             return self.normalize(obs)
 
     @torch.no_grad()
-    def backward_map(self, obs: dict[torch.Tensor]):
+    def backward_map(self, obs: Union[dict, torch.Tensor]):
         obs = self._normalize(obs)
         obs = self._build_back_obs(obs)
         return self._backward_map_(obs)
 
     @torch.no_grad()
-    def forward_map(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def forward_map(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._normalize(obs)
         obs = self._build_critic_obs(obs)
         return self._forward_map_(obs, z, action)
 
     @torch.no_grad()
-    def actor(self, obs: dict[torch.Tensor], z: torch.Tensor, std: float):
+    def actor(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, std: float):
         obs = self._normalize(obs)
 
         return self._actor(obs, z, std)
 
     @torch.no_grad()
-    def critic(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def critic(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._normalize(obs)
         obs = self._build_critic_obs(obs)
         return self._critic_(obs, z, action)
 
     @torch.no_grad()
-    def discriminator(self, obs: dict[torch.Tensor], z: torch.Tensor):
+    def discriminator(self, obs: Union[dict, torch.Tensor], z: torch.Tensor):
         obs = self._normalize(obs)
         obs = self._build_back_obs(obs)
         return self._discriminator_(obs, z)
 
     @torch.no_grad()
-    def auxi_critic(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def auxi_critic(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._normalize(obs)
         obs = self._build_critic_obs(obs)
         return self._auxi_critic_(obs, z, action)
@@ -229,13 +223,13 @@ class FBModel(nn.Module):
             z = math.sqrt(z.shape[-1]) * F.normalize(z, dim=-1)
         return z
 
-    def act(self, obs: dict[torch.Tensor], z: torch.Tensor, mean: bool = True) -> torch.Tensor:
+    def act(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, mean: bool = True) -> torch.Tensor:
         dist = self.actor(obs, z, self.cfg.actor_std)
         if mean:
             return dist.mean
         return dist.sample()
 
-    def reward_inference(self, next_obs: dict[torch.Tensor], reward: torch.Tensor, weight: torch.Tensor | None = None) -> torch.Tensor:
+    def reward_inference(self, next_obs: Union[dict, torch.Tensor], reward: torch.Tensor, weight: Union[torch.Tensor, None] = None) -> torch.Tensor:
         num_batches = int(np.ceil(next_obs[0].shape[0] / self.cfg.inference_batch_size))
         z = 0
         wr = reward if weight is None else reward * weight
@@ -247,14 +241,14 @@ class FBModel(nn.Module):
             z += torch.matmul(wr[start_idx:end_idx].to(self.cfg.device).T, B)
         return self.project_z(z)
 
-    def reward_wr_inference(self, next_obs: dict[torch.Tensor], reward: torch.Tensor) -> torch.Tensor:
+    def reward_wr_inference(self, next_obs: Union[dict, torch.Tensor], reward: torch.Tensor) -> torch.Tensor:
         return self.reward_inference(next_obs, reward, F.softmax(10 * reward, dim=0))
 
-    def goal_inference(self, next_obs: dict[torch.Tensor]) -> torch.Tensor:
+    def goal_inference(self, next_obs: Union[dict, torch.Tensor]) -> torch.Tensor:
         z = self.backward_map(next_obs)
         return self.project_z(z)
 
-    def tracking_inference(self, next_obs: dict[torch.Tensor]) -> torch.Tensor:
+    def tracking_inference(self, next_obs: Union[dict, torch.Tensor]) -> torch.Tensor:
         z = self.backward_map(next_obs)
         for step in range(z.shape[0]):
             end_idx = min(step + self.cfg.seq_length, z.shape[0])
@@ -265,20 +259,20 @@ class FBModel(nn.Module):
     #
     #
     #
-    def _build_back_obs(self, status: dict[torch.Tensor]):
+    def _build_back_obs(self, status: Union[dict, torch.Tensor]):
         obs, obs_privileges = status["obs"], status["privileges"]
         obs = obs[:, -1, :]
         obs = torch.cat([obs, obs_privileges], dim = -1)
         return obs
 
-    def _build_critic_obs(self, status: dict[torch.Tensor]):
+    def _build_critic_obs(self, status: Union[dict, torch.Tensor]):
         obs, action, obs_privileges = status["obs"], status["action"], status["privileges"]
         obs = torch.reshape(obs, (obs.shape[0], -1))
         action = torch.reshape(action, (action.shape[0], -1))
         obs = torch.cat([obs, action, obs_privileges], dim = -1)
         return obs
 
-    def _build_actor_obs(self, status: dict[torch.Tensor]):
+    def _build_actor_obs(self, status: Union[dict, torch.Tensor]):
         obs, action = status["obs"], status["action"]
         obs = torch.reshape(obs, (obs.shape[0], -1))
         action = torch.reshape(action, (action.shape[0], -1))
@@ -287,50 +281,50 @@ class FBModel(nn.Module):
     #
     #
     #
-    def _actor(self, obs: dict[torch.Tensor], z: torch.Tensor, std: float):
+    def _actor(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, std: float):
         obs = self._build_actor_obs(obs)
         return self._actor_(obs, z, std)
 
-    def _forward_map(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def _forward_map(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
         return self._forward_map_(obs, z, action)
 
-    def _target_forward_map(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def _target_forward_map(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
         return self._target_forward_map_(obs, z, action)
 
-    def _backward_map(self, obs: dict[torch.Tensor]):
+    def _backward_map(self, obs: Union[dict, torch.Tensor]):
         obs = self._build_back_obs(obs)
         return self._backward_map_(obs)
 
-    def _target_backward_map(self, obs: dict[torch.Tensor]):
+    def _target_backward_map(self, obs: Union[dict, torch.Tensor]):
         obs = self._build_back_obs(obs)
         return self._target_backward_map_(obs)
 
-    def _critic(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def _critic(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
         return self._critic_(obs, z, action)
 
-    def _target_critic(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def _target_critic(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
         return self._target_critic_(obs, z, action)
 
-    def _discriminator(self, obs: dict[torch.Tensor], z: torch.Tensor):
+    def _discriminator(self, obs: Union[dict, torch.Tensor], z: torch.Tensor):
         obs = self._build_back_obs(obs)
         return self._discriminator_(obs, z)
 
-    def _compute_logits(self, obs: dict[torch.Tensor], z: torch.Tensor):
+    def _compute_logits(self, obs: Union[dict, torch.Tensor], z: torch.Tensor):
         obs = self._build_back_obs(obs)
         return self._discriminator_.compute_logits(obs, z)
 
-    def _compute_reward(self, obs: dict[torch.Tensor], z: torch.Tensor):
+    def _compute_reward(self, obs: Union[dict, torch.Tensor], z: torch.Tensor):
         obs = self._build_back_obs(obs)
         return self._discriminator_.compute_reward(obs, z)
 
-    def _auxi_critic(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def _auxi_critic(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
         return self._auxi_critic_(obs, z, action)
 
-    def _target_auxi_critic(self, obs: dict[torch.Tensor], z: torch.Tensor, action: torch.Tensor):
+    def _target_auxi_critic(self, obs: Union[dict, torch.Tensor], z: torch.Tensor, action: torch.Tensor):
         obs = self._build_critic_obs(obs)
         return self._target_auxi_critic_(obs, z, action)

@@ -6,7 +6,7 @@
 import dataclasses
 import torch
 import torch.nn.functional as F
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 import os.path as osp
 
 from .model import FBModel, config_from_dict
@@ -33,7 +33,7 @@ class TrainConfig:
     stddev_clip: float = 0.3
     q_loss_coef: float = 0.0
     batch_size: int = 1024
-    discount: float | None = None
+    discount: Union[float, None] = None
     use_mix_rollout: bool = False
     update_z_every_step: int = 150
     z_buffer_size: int = 10000
@@ -117,7 +117,7 @@ class FBAgent:
         return self._model.act(obs, z, mean)
 
     @torch.no_grad()
-    def sample_mixed_z(self, train_goal: torch.Tensor | None = None, *args, **kwargs):
+    def sample_mixed_z(self, train_goal: Union[torch.Tensor, None] = None, *args, **kwargs):
         # samples a batch from the z distribution used to update the networks
         z = self._model.sample_z(self.cfg.train.batch_size, device=self.device)
 
@@ -186,8 +186,8 @@ class FBAgent:
         next_obs: torch.Tensor,
         goal: torch.Tensor,
         z: torch.Tensor,
-        q_loss_coef: float | None,
-        clip_grad_norm: float | None,
+        q_loss_coef: Union[float, None],
+        clip_grad_norm: Union[float, None],
     ) -> Dict[str, torch.Tensor]:
         with torch.no_grad():
             dist = self._model._actor(next_obs, z, self._model.cfg.actor_std)
@@ -270,11 +270,11 @@ class FBAgent:
         obs: torch.Tensor,
         action: torch.Tensor,
         z: torch.Tensor,
-        clip_grad_norm: float | None,
+        clip_grad_norm: Union[float, None],
     ) -> Dict[str, torch.Tensor]:
         return self.update_td3_actor(obs=obs, z=z, clip_grad_norm=clip_grad_norm)
 
-    def update_td3_actor(self, obs: torch.Tensor, z: torch.Tensor, clip_grad_norm: float | None) -> Dict[str, torch.Tensor]:
+    def update_td3_actor(self, obs: torch.Tensor, z: torch.Tensor, clip_grad_norm: Union[float, None]) -> Dict[str, torch.Tensor]:
         dist = self._model._actor(obs, z, self._model.cfg.actor_std)
         action = dist.sample(clip=self.cfg.train.stddev_clip)
         Fs = self._model._forward_map(obs, z, action)  # num_parallel x batch x z_dim
@@ -292,7 +292,7 @@ class FBAgent:
         return {"actor_loss": actor_loss.detach(), "q": Q.mean().detach()}
 
     def get_targets_uncertainty(
-        self, preds: torch.Tensor, pessimism_penalty: torch.Tensor | float
+        self, preds: torch.Tensor, pessimism_penalty: Union[torch.Tensor, float]
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         dim = 0
         preds_mean = preds.mean(dim=dim)
@@ -308,7 +308,7 @@ class FBAgent:
         )
         return preds_mean, preds_unc, preds_mean - pessimism_penalty * preds_unc
 
-    def maybe_update_rollout_context(self, z: torch.Tensor | None, step_count: torch.Tensor) -> torch.Tensor:
+    def maybe_update_rollout_context(self, z: Union[torch.Tensor, None], step_count: torch.Tensor) -> torch.Tensor:
         # get mask for environmets where we need to change z
         if z is not None:
             mask_reset_z = step_count % self.cfg.train.update_z_every_step == 0
@@ -322,7 +322,7 @@ class FBAgent:
         return z
 
     @classmethod
-    def load(cls, path: str, device: str | None = None):
+    def load(cls, path: str, device: Union[str, None] = None):
         path = Path(path)
         with (path / "config.json").open() as f:
             loaded_config = json.load(f)

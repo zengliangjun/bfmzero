@@ -13,6 +13,7 @@ import copy
 from pathlib import Path
 from safetensors.torch import save_model as safetensors_save_model
 import json
+from typing import Union
 
 from ..nn_models import build_backward, build_forward, build_actor, eval_mode
 from .. import config_from_dict, load_model
@@ -93,7 +94,7 @@ class FBModel(nn.Module):
         return super().to(*args, **kwargs)
 
     @classmethod
-    def load(cls, path: str, device: str | None = None):
+    def load(cls, path: str, device: Union[str, None] = None):
         return load_model(path, device, cls=cls)
 
     def save(self, output_folder: str) -> None:
@@ -134,7 +135,7 @@ class FBModel(nn.Module):
             return dist.mean
         return dist.sample()
 
-    def reward_inference(self, next_obs: torch.Tensor, reward: torch.Tensor, weight: torch.Tensor | None = None) -> torch.Tensor:
+    def reward_inference(self, next_obs: torch.Tensor, reward: torch.Tensor, weight: Union[torch.Tensor, None] = None) -> torch.Tensor:
         num_batches = int(np.ceil(next_obs.shape[0] / self.cfg.inference_batch_size))
         z = 0
         wr = reward if weight is None else reward * weight

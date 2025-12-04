@@ -1,6 +1,6 @@
 
 import dataclasses
-from typing import Dict
+from typing import Dict, Union
 
 import torch
 import torch.nn.functional as F
@@ -112,7 +112,7 @@ class BFMAgent(FBcprAgent):
 
 
     @torch.no_grad()
-    def sample_mixed_z(self, train_goal: dict[torch.Tensor], expert_encodings: torch.Tensor, *args, **kwargs):
+    def sample_mixed_z(self, train_goal: Union[dict, torch.Tensor], expert_encodings: torch.Tensor, *args, **kwargs):
         z = self._model.sample_z(self.cfg.train.batch_size, device=self.device)
         p_goal = self.cfg.train.train_goal_ratio
         p_expert_asm = self.cfg.train.expert_asm_ratio
@@ -339,7 +339,7 @@ class BFMAgent(FBcprAgent):
         obs: torch.Tensor,
         action: torch.Tensor,
         z: torch.Tensor,
-        clip_grad_norm: float | None,
+        clip_grad_norm: Union[float, None],
     ) -> Dict[str, torch.Tensor]:
         dist = self._model._actor(obs, z, self._model.cfg.actor_std)
         action = dist.sample(clip=self.cfg.train.stddev_clip)

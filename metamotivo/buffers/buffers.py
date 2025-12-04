@@ -19,13 +19,13 @@ Device = Union[str, torch.device]
 
 
 @functools.singledispatch
-def _to_torch(value: Any, device: Device | None = None) -> Any:
+def _to_torch(value: Any, device: Union[Device, None] = None) -> Any:
     raise Exception(f"No known conversion for type ({type(value)}) to PyTorch registered. Report as issue on github.")
 
 
 @_to_torch.register(numbers.Number)
 @_to_torch.register(np.ndarray)
-def _np_to_torch(value: np.ndarray, device: Device | None = None) -> torch.Tensor:
+def _np_to_torch(value: np.ndarray, device: Union[Device, None] = None) -> torch.Tensor:
     tensor = torch.tensor(value)
     if device:
         return tensor.to(device=device)
@@ -33,7 +33,7 @@ def _np_to_torch(value: np.ndarray, device: Device | None = None) -> torch.Tenso
 
 
 @_to_torch.register(torch.Tensor)
-def _torch_to_torch(value: np.ndarray, device: Device | None = None) -> torch.Tensor:
+def _torch_to_torch(value: np.ndarray, device: Union[Device, None] = None) -> torch.Tensor:
     tensor = value.clone().detach()
     if device:
         return tensor.to(device=device)
@@ -120,7 +120,7 @@ class DictBuffer:
 
 
 
-def extract_values(d: Dict, idxs: List | torch.Tensor | np.ndarray) -> Dict:
+def extract_values(d: Dict, idxs: Union[List, torch.Tensor, np.ndarray]) -> Dict:
     result = {}
     for k, v in d.items():
         if isinstance(v, Mapping):

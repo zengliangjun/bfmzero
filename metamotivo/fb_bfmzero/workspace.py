@@ -12,6 +12,7 @@ import os
 import os.path as osp
 from loguru import logger as ulogger
 import torch
+from typing import Union
 
 from metamotivo.buffers.buffers import DictBuffer
 from metamotivo.fb_bfmzero import agent
@@ -42,7 +43,7 @@ class TrainConfig:
     eval_every_steps: int = 2_000
 
     # work dir
-    work_dir: str | None = None
+    work_dir: Union[str, None] = None
 
     prioritization: bool = False
     prioritization_min_val: float = 0.5
