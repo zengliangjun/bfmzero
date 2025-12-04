@@ -1,0 +1,82 @@
+# @package _global_
+
+# Be careful when using _raw, history
+obs:
+  obs_dict:
+    actor_obs: [
+      "base_ang_vel",
+      "projected_gravity",
+      "dof_pos",
+      "dof_vel",
+    ]
+
+    critic_obs: [
+      "root_h_obs",
+      "local_body_pos",
+      "local_body_rot_obs",
+      "local_body_vel",
+      "local_body_ang_vel",
+    ]
+
+    history_obs: ["history_obs"]
+    history_actions: ["history_actions"]
+
+  obs_auxiliary:
+    history_obs: {
+      base_ang_vel: 4,
+      projected_gravity: 4,
+      dof_pos: 4,
+      dof_vel: 4,
+    }
+    history_actions: {
+      actions: 4,
+    }
+
+  obs_scales: {
+    root_h_obs: 1.0,
+    local_body_pos: 1.0,
+    local_body_rot_obs: 1,
+    local_body_vel: 1.0,
+    local_body_ang_vel: 1.0,
+
+    base_ang_vel: 1.0,
+    projected_gravity: 1.0,
+    dof_pos: 1.0,
+    dof_vel: 1.0,
+    actions: 1.0,
+
+    history_obs: 1.0,
+    history_actions: 1.0,
+  }
+
+  noise_scales: {
+    root_h_obs: 0.0,
+    local_body_pos: 0.0,
+    local_body_rot_obs: 0,
+    local_body_vel: 0.0,
+    local_body_ang_vel: 0.0,
+
+    base_ang_vel: 0,
+    projected_gravity: 0,
+    dof_pos: 0,
+    dof_vel: 0,
+    actions: 0,
+
+    history_obs: 0,
+    history_actions: 0,
+  }
+
+  # obs_dims should use list instead of dict
+  # will be converted to dict in `pre_process_config`
+  obs_dims:
+    - root_h_obs: 1
+    - local_body_pos:  ${eval:'(${robot.num_bodies} - 1) * 3'}
+    - local_body_rot_obs: ${eval:'${robot.num_bodies} * 6'}
+    - local_body_vel: ${eval:'${robot.num_bodies} * 3'}
+    - local_body_ang_vel: ${eval:'${robot.num_bodies} * 3'}
+    - base_ang_vel: 3
+    - projected_gravity: 3
+    - dof_pos: ${robot.dof_obs_size}
+    - dof_vel: ${robot.dof_obs_size}
+    - actions: ${robot.dof_obs_size}
+

@@ -11,20 +11,14 @@ import sys
 import os
 import os.path as osp
 
-if False:
-    HumanoidVerse_root = "/workspace/data2/VSCODE/humanoid_motions/WORKSPACE_FORME/HumanoidVerse"
-    if HumanoidVerse_root not in sys.path:
-        sys.path.insert(0, HumanoidVerse_root)
-
 from humanoidverse.utils.config_utils import *  # noqa: E402, F403
-from humanoidverse_env import hydra_main
+from humanoidverse_env import hydra_motions_main
 
 simulator_type = None
 simulation_app = None
 humanoidverse_task = None
 
-@hydra_main.main(config_path="configs", config_name="base", version_base="1.1")
-def humanoidverse_start(config: OmegaConf):
+def start(config: OmegaConf):
     # import ipdb; ipdb.set_trace()
     global humanoidverse_task
     global simulation_app
@@ -53,9 +47,10 @@ def humanoidverse_start(config: OmegaConf):
         import isaacgym  # noqa: F401
 
     # have to import torch after isaacgym
+    from humanoidverse_env.utils.helpers import pre_process_config
+
     import torch  # noqa: E402
     from humanoidverse.envs.base_task.base_task import BaseTask  # noqa: E402
-    from humanoidverse.utils.helpers import pre_process_config
     from humanoidverse.utils.logging import HydraLoggerBridge
 
     # logging to hydra log file
@@ -76,9 +71,25 @@ def humanoidverse_start(config: OmegaConf):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     pre_process_config(config)
 
-    config.env.config.save_rendering_dir = osp.join(config.experiment_dir, "renderings_training")
+    config.env.config.save_rendering_dir = osp.join(config.eval_log_dir, "renderings_training")
     env: BaseTask = instantiate(config=config.env, device=device)
     humanoidverse_task = env
+
+@hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")
+def humanoidverse_start(config: OmegaConf):
+    config.headless = False
+    start(config)
+
+@hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")
+def humanoidverse_headless(config: OmegaConf):
+    config.headless = True
+    start(config)
+
+@hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")
+def humanoidverse_train(config: OmegaConf):
+    config.headless = True
+    config.num_envs = 128 #1024
+    start(config)
 
 def humanoidverse_final():
     global simulator_type, simulation_app

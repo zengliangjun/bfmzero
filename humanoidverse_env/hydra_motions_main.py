@@ -51,7 +51,11 @@ def main(
     """
 
     hydra.version.setbase(version_base)
-
+    import os
+    import os.path as osp
+    print(osp.abspath(os.getcwd()))
+    print(osp.abspath(__file__))
+    print(osp.abspath(config_path))
 
     def main_decorator(task_function: TaskFunction) -> Callable[[], None]:
         @functools.wraps(task_function)
@@ -63,26 +67,18 @@ def main(
                 args = args_parser.parse_args()
                 # FOR DEBUG ONLY
                 ## for privileged training
-                if "base" == config_name:
+                if "motions_envs" == config_name:
                     args.overrides = [
-                        '+algo=fb_cpr',
-                        '+env=bfm_task',
                         '+simulator=isaacgym',
-                        '+robot=metamotivo/hum',
+                        '+env=motions',
                         '+domain_rand=NO_domain_rand',
-                        '+rewards=bfm/reward_humenv',
-                        '+terrain=terrain_play_plane',
-                        '+obs=bfm_cpr/hum_obs',
-                        'num_envs=1',
-                        'simulator.config.sim.fps=450',
-                        'simulator.config.sim.control_decimation=15',
-                        'project_name=metamotivo_cpr',
-                        'experiment_name=metamotivo_cpr_IsaacGym',
-                        'headless=False'
-                    ]
-                else:
-                    args.overrides = [
-                        '+checkpoint=logs/MotionTracking/isaacgym-MotionTracking_CR7-motion_contrast-g1_29dof_anneal_23dof-20250622_191222/model_10700.pt'
+                        '+rewards=motions/bfm_zero',
+                        '+robot=g1/g1_29dof',
+                        '+terrain=terrain_locomotion_plane',
+                        '+obs=motions/motions',
+                        '+num_envs=1',
+                        '+headless=False',
+                        '+experiment_name=motion_play'
                     ]
 
                 if args.experimental_rerun is not None:
