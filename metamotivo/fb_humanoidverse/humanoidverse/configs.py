@@ -1,4 +1,4 @@
 import os
 
 cwd = os.getcwd()
-motions_root = f"/workspace/data/motions"
+motions_root = f"{cwd}/data/motions"

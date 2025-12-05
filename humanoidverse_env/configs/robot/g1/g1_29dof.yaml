@@ -210,6 +210,9 @@ robot:
 
     fix_base_link: False # TEST: fix base link to world
 
+    motions_root: "data/motions"
+    motions_sample_ratio: 0.5
+
     isaacsim_joint_names: [
             'left_hip_pitch_joint', 'right_hip_pitch_joint',
             'waist_yaw_joint',

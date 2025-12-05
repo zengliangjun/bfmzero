@@ -3,7 +3,7 @@ import torch
 from humanoidverse.utils.torch_utils import *
 from humanoidverse.utils.spatial_utils import rotations
 from humanoidverse.envs.legged_base_task.legged_robot_base import LeggedRobotBase
-
+from humanoidverse_env.motions import motions_buffer
 class MotionsTask(LeggedRobotBase):
     def __init__(self, config, device):
         super().__init__(config, device)
@@ -12,6 +12,9 @@ class MotionsTask(LeggedRobotBase):
         super()._setup_robot_body_indices()
         if hasattr(self.config.robot, "dof_ankle_roll_names"):
             self.ankle_roll_indices = [self.dof_names.index(dof) for dof in self.config.robot.dof_ankle_roll_names]
+
+        if hasattr(self.config.robot.asset, "motions_root"):
+            self.reset_motion_buffer = motions_buffer.MotionBuffer(self.config.robot.asset.motions_root)
 
     ######################### for motion play #########################
     def get_motion_joint(self, joint_names: list):
@@ -43,8 +46,40 @@ class MotionsTask(LeggedRobotBase):
         if hasattr(self, "motions_states") and self.motions_states != None:
             reset_env_ids = torch.arange(self.num_envs, device=self.device)
             super().reset_envs_idx(reset_env_ids, self.motions_states)
+        elif hasattr(self, "reset_motion_buffer"):
+            self._reset_envs_idx_with_motion_buffer(env_ids, target_states=target_states, target_buf=target_buf)
         else:
             super().reset_envs_idx(env_ids, target_states, target_buf)
+
+    def _reset_envs_idx_with_motion_buffer(self, env_ids, target_states=None, target_buf=None):
+        size = len(env_ids)
+        if len(env_ids) == 0:
+            return
+
+        dof_states = torch.zeros((size, self.num_dof, 2), device=str(self.device))
+        dof_states[:, :, 0] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (size, self.num_dof), device=str(self.device))
+
+        root_states = torch.repeat_interleave(self.base_init_state[None, :], size, dim = 0)
+        root_states[:, 7:13] = torch_rand_float(-0.5, 0.5, (size, 6), device=str(self.device)) # [7:10]: lin vel, [10:13]: ang vel
+
+        ##
+        prob = torch.tensor([self.config.robot.asset.motions_sample_ratio, 1 - self.config.robot.asset.motions_sample_ratio],
+                                dtype=torch.float32, device=env_ids.device)
+
+        mixidxs = torch.multinomial(prob, num_samples=env_ids.shape[0], replacement=True)
+        motions_sample = mixidxs == 0
+
+        size = torch.sum(motions_sample.float()).cpu().item()
+        if size != 0:
+            motions = self.reset_motion_buffer.sample(size, self.device)
+            dof_states[motions_sample, :] = motions['dof_states']
+            root_states[motions_sample, :] = motions['root_states']
+
+        target_states = {
+            'dof_states': dof_states,
+            'root_states': root_states,
+        }
+        super().reset_envs_idx(env_ids, target_states, target_buf)
 
     ######################### Observations #########################
 
