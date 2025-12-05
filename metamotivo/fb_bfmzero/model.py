@@ -6,7 +6,7 @@ import copy
 import torch.nn.functional as F
 import copy
 from pathlib import Path
-from safetensors.torch import save_model as safetensors_save_model
+from safetensors.torch import save_model as safetensors_save_model, load_model as safetensors_load_model
 import json
 import math
 import numpy as np
@@ -127,6 +127,10 @@ class FBModel(nn.Module):
 
         self._target_critic_ = copy.deepcopy(self._critic_)
         self._target_auxi_critic_ = copy.deepcopy(self._auxi_critic_)
+
+    def load_model(self, mode_folder: str):
+        mode_folder = Path(mode_folder)
+        safetensors_load_model(self, mode_folder / "model.safetensors", device=self.cfg.device)
 
     @classmethod
     def load(cls, path: str, device: Union[str, None] = None):
