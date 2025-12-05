@@ -181,7 +181,7 @@ class MotionsTask(LeggedRobotBase):
     def _reward_penalty_ankle_roll(self):
         # Penalize dof positions too close to the limit
         diff = self.simulator.dof_pos[:, self.ankle_roll_indices] - self.default_dof_pos[:, self.ankle_roll_indices]
-        return torch.sum(diff, dim=1)
+        return torch.sum(torch.abs(diff), dim=1)
 
     def _reward_penalty_contact(self):
         contacted = torch.norm(self.simulator.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 1
