@@ -13,7 +13,7 @@ class CollectConfig:
     def __post_init__(self):
         self.observations_key = ["actor_obs", "critic_obs", "history_obs", "history_actions"]
 
-class CollectContext:
+class BaseContext:
 
     cfg: CollectConfig
     collect_context: dict
@@ -36,6 +36,32 @@ class CollectContext:
             "privileges": critic_obs.to(device)
         }
         return train_status
+
+    def reset(self, env):
+        obs, extras = env.reset()
+        self.collect_context = {
+                "obs": obs,
+                'done': None,
+                "context_z": None
+            }
+
+        self.collect_buffers = {}
+
+        #for key, value in obs.items():
+        for key in self.cfg.observations_key:
+            value = obs[key]
+            self.collect_buffers[key] = torch.zeros_like(value, device = self.cfg.device)
+            self.collect_buffers[key][...] = value.to(self.cfg.device)
+
+class CollectContext(BaseContext):
+
+    cfg: CollectConfig
+    collect_context: dict
+    collect_buffers: dict
+
+    def __init__(self, cfg) -> None:
+        super().__init__(cfg)
+
 
     def _build_collect(self, collect: dict, output: defaultdict, indexes: torch.Tensor, device: str):
         actor_obs = collect["actor_obs"]
@@ -103,24 +129,24 @@ class CollectContext:
             self.collect_buffers[key][...] = value.to(self.cfg.device)
         return output
 
-    def reset(self, env):
-        obs, extras = env.reset()
-        self.collect_context = {
-                "obs": obs,
-                'done': None,
-                "context_z": None
-            }
-
-        self.collect_buffers = {}
-
-        #for key, value in obs.items():
-        for key in self.cfg.observations_key:
-            value = obs[key]
-            self.collect_buffers[key] = torch.zeros_like(value, device = self.cfg.device)
-            self.collect_buffers[key][...] = value.to(self.cfg.device)
-
-
     def collect_step(self, step, env, agent, buffer: DictBuffer):
         data = self._train_collect_one_step(env, agent, step)
         if data is not None:
             buffer.extend(data)
+
+
+class RunContext(BaseContext):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def observations(self, device):
+        return self._build_observations(device)
+
+    def step(self, env, action: torch.Tensor):
+        action = action.to(env.task.device)
+        next_obs, rewards, next_dones, next_infos = env.step(action)
+
+        for key in self.cfg.observations_key:
+            value = next_obs[key]
+            self.collect_buffers[key] = torch.zeros_like(value, device = self.cfg.device)
+            self.collect_buffers[key][...] = value.to(self.cfg.device)

@@ -68,7 +68,7 @@ def start(config: OmegaConf):
     unresolved_conf = OmegaConf.to_container(config, resolve=False)
     os.chdir(hydra.utils.get_original_cwd())
 
-    device = "cuda:1" if torch.cuda.is_available() else "cpu"
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     pre_process_config(config)
 
     config.env.config.save_rendering_dir = osp.join(config.eval_log_dir, "renderings_training")
@@ -89,6 +89,12 @@ def humanoidverse_headless(config: OmegaConf):
 def humanoidverse_train(config: OmegaConf):
     config.headless = True
     config.num_envs = 1024
+    start(config)
+
+@hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")
+def humanoidverse_test(config: OmegaConf):
+    config.headless = False
+    config.num_envs = 2
     start(config)
 
 def humanoidverse_final():

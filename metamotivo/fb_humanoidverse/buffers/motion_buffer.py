@@ -61,6 +61,11 @@ class MotionItems:
         output["next"]["observations"].append(next_observations)
         output["next"]["privileges"].append(next_critic)
 
+    def trajectories(self, output: defaultdict):
+        observations =  torch.cat((self.history_obs, self.actor_obs[:, None, :]), dim = 1)
+        output["observations"].append(observations)
+        output["privileges"].append(self.critic_obs)
+
 class MotionBuffer:
     def __init__(self, cfg: MotionBufferConfig):
         self.config = cfg
@@ -177,6 +182,14 @@ class MotionBuffer:
         _, output = self.sample_with_epinds(batch_size, device)
         return output
 
+    def tracking_motions(self, num_envs):
+        epinds = torch.multinomial(self.trajectory_priorities, num_envs, replacement=True)
+
+        output = defaultdict(list)
+        for epidx in epinds:
+            _ep: MotionItems = self.storages[epidx.item()]
+            _ep.trajectories(output)
+        return output
 
     def priorities(self, metrics):
         pass
