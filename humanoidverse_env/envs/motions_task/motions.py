@@ -4,6 +4,8 @@ from humanoidverse.utils.torch_utils import *
 from humanoidverse.utils.spatial_utils import rotations
 from humanoidverse.envs.legged_base_task.legged_robot_base import LeggedRobotBase
 from humanoidverse_env.motions import motions_buffer
+from humanoidverse_env.isaac_utils import rotations
+
 class MotionsTask(LeggedRobotBase):
     def __init__(self, config, device):
         super().__init__(config, device)
@@ -15,6 +17,28 @@ class MotionsTask(LeggedRobotBase):
 
         if hasattr(self.config.robot.asset, "motions_root"):
             self.reset_motion_buffer = motions_buffer.MotionBuffer(self.config.robot.asset.motions_root)
+
+        if hasattr(self.config.robot, "extend_config"):
+            extend_parent_ids, extend_pos, extend_rot = [], [], []
+            for extend_config in self.config.robot.extend_config:
+                extend_parent_ids.append(self.simulator._body_list.index(extend_config["parent_name"]))
+                # extend_parent_ids.append(self.simulator.find_rigid_body_indice(extend_config["parent_name"]))
+                extend_pos.append(extend_config["pos"])
+                extend_rot.append(extend_config["rot"])
+                self.simulator._body_list.append(extend_config["joint_name"])
+
+            self.extend_body_parent_ids = torch.tensor(extend_parent_ids, device=self.device, dtype=torch.long)
+            self.extend_body_pos_in_parent = torch.tensor(extend_pos).repeat(self.num_envs, 1, 1).to(self.device)
+            self.extend_body_rot_in_parent_wxyz = torch.tensor(extend_rot).repeat(self.num_envs, 1, 1).to(self.device)
+            self.extend_body_rot_in_parent_xyzw = self.extend_body_rot_in_parent_wxyz[:, :, [1, 2, 3, 0]]
+            self.num_extend_bodies = len(extend_parent_ids)
+
+            self.marker_coords = torch.zeros(self.num_envs,
+                                         self.num_bodies + self.num_extend_bodies,
+                                         3,
+                                         dtype=torch.float,
+                                         device=self.device,
+                                         requires_grad=False) # extend
 
     ######################### for motion play #########################
     def get_motion_joint(self, joint_names: list):
@@ -82,78 +106,121 @@ class MotionsTask(LeggedRobotBase):
         super().reset_envs_idx(env_ids, target_states, target_buf)
 
     ######################### Observations #########################
+    def calcute_with_extends(self):
+        if not hasattr(self, "extend_body_parent_ids"):
+            return
+        rotated_pos_in_parent = rotations.my_quat_rotate(
+            self.simulator._rigid_body_rot[:, self.extend_body_parent_ids].reshape(-1, 4),
+            self.extend_body_pos_in_parent.reshape(-1, 3)
+        )
+        extend_pos = rotations.my_quat_rotate(
+            self.extend_body_rot_in_parent_xyzw.reshape(-1, 4),
+            rotated_pos_in_parent
+        ).view(self.num_envs, -1, 3) + self.simulator._rigid_body_pos[:, self.extend_body_parent_ids]
+        ##
+        extend_rot = rotations.quat_mul(self.simulator._rigid_body_rot[:, self.extend_body_parent_ids].reshape(-1, 4),
+                                    self.extend_body_rot_in_parent_xyzw.reshape(-1, 4),
+                                    w_last=True).view(self.num_envs, -1, 4)
+        extend_ang_vel = self.simulator._rigid_body_ang_vel[:, self.extend_body_parent_ids]
+
+        extend_ang_vel_contribution = torch.cross(extend_ang_vel, self.extend_body_pos_in_parent.view(self.num_envs, -1, 3), dim=2)
+        extend_vel = self.simulator._rigid_body_vel[:, self.extend_body_parent_ids] + extend_ang_vel_contribution.view(self.num_envs, -1, 3)
+
+        self.extend_rigid_body_pos = torch.cat((self.simulator._rigid_body_pos, extend_pos), dim=1)
+        self.extend_rigid_body_rot = torch.cat((self.simulator._rigid_body_rot, extend_rot), dim=1)
+        self.extend_rigid_ang_vel = torch.cat((self.simulator._rigid_body_ang_vel, extend_ang_vel), dim=1)
+        self.extend_rigid_vel = torch.cat((self.simulator._rigid_body_vel, extend_vel), dim=1)
+
+
+    def _pre_compute_observations_callback(self):
+        super()._pre_compute_observations_callback()
+
+        ##
+        if not hasattr(self, "extend_body_parent_ids"):
+            rigid_body_pos = self.simulator._rigid_body_pos
+            rigid_body_rot = self.simulator._rigid_body_rot
+            rigid_body_ang_vel = self.simulator._rigid_body_ang_vel
+            rigid_body_vel = self.simulator._rigid_body_vel
+            num_bodies = self.num_bodies
+        else:
+            self.calcute_with_extends()
+            rigid_body_pos = self.extend_rigid_body_pos
+            rigid_body_rot = self.extend_rigid_body_rot
+            rigid_body_ang_vel = self.extend_rigid_ang_vel
+            rigid_body_vel = self.extend_rigid_vel
+            num_bodies = self.num_bodies + self.num_extend_bodies
+
+        heading_quats = rotations.calc_heading_quat(self.base_quat, w_last=True)
+        heading_inv_quats = rotations.calc_heading_quat_inv(self.base_quat, w_last=True)
+
+        heading_quats = torch.repeat_interleave(heading_quats[:, None, :], num_bodies, dim = 1)
+        heading_quats = torch.reshape(heading_quats, (-1, 4))
+
+        heading_inv_quats = torch.repeat_interleave(heading_inv_quats[:, None, :], num_bodies, dim = 1)
+        heading_inv_quats = torch.reshape(heading_inv_quats, (-1, 4))
+
+
+
+        # lb pos
+        lb_pos_w = rigid_body_pos - rigid_body_pos[:, :1]
+        lb_pos_w = torch.reshape(lb_pos_w, (-1, 3))
+        lb_heading_pos = quat_rotate_inverse(heading_inv_quats, lb_pos_w)
+        self.lb_heading_pos = torch.reshape(lb_heading_pos, (-1, num_bodies, 3))
+
+        # body rot
+        body_rot_w = rigid_body_rot
+        body_rot_w = torch.reshape(body_rot_w, (-1, 4))
+        heading_body_rot = rotations.quat_mul_norm(heading_inv_quats, body_rot_w, w_last=True)
+        heading_body_tan_norm = quat_to_tan_norm_xyzw(heading_body_rot)
+        self.lb_heading_tan_norm = torch.reshape(heading_body_tan_norm, (-1, num_bodies, 6))
+
+        # vel
+        body_vel_w = rigid_body_vel
+        body_vel_w = torch.reshape(body_vel_w, (-1, 3))
+        lb_heading_vel = quat_rotate_inverse(heading_inv_quats, body_vel_w)
+        self.lb_heading_vel = torch.reshape(lb_heading_vel, (-1, num_bodies, 3))
+        # ang vel
+        body_ang_vel_w = rigid_body_ang_vel
+        body_ang_vel_w = torch.reshape(body_ang_vel_w, (-1, 3))
+        lb_heading_ang_vel = quat_rotate_inverse(heading_inv_quats, body_ang_vel_w)
+        self.lb_heading_ang_vel = torch.reshape(lb_heading_ang_vel, (-1, num_bodies, 3))
 
     def _get_obs_root_h_obs(self):
         self.root_h_obs = self.simulator._rigid_body_pos[:, 0, 2:]
         return self.root_h_obs
 
     def _get_obs_local_body_pos(self):
-        root_body = self.simulator._rigid_body_pos[:, :1]
         if hasattr(self, "motion_body_ids"):
-            body_pos_w = self.simulator._rigid_body_pos[:, self.motion_body_ids]
+            lb_heading_pos = self.lb_heading_pos[:, self.motion_body_ids]
         else:
-            body_pos_w = self.simulator._rigid_body_pos
+            lb_heading_pos = self.lb_heading_pos[:, 1:]
 
-        lb_pos_w = body_pos_w - root_body
-        lb_pos_w = lb_pos_w[:, 1:, :]
-        body_size = lb_pos_w.shape[1]
-
-        quats = torch.repeat_interleave(self.base_quat[:, None, :], body_size, dim = 1)
-        quats = torch.reshape(quats, (-1, 4))
-
-        lb_pos_w = torch.reshape(lb_pos_w, (-1, 3))
-        lb_pos = quat_rotate_inverse(quats, lb_pos_w)
-        lb_pos = lb_pos
-        self.lb_pos = torch.reshape(lb_pos, (-1, body_size * 3))
-        return self.lb_pos
+        lb_heading_pos = torch.reshape(lb_heading_pos, (lb_heading_pos.shape[0], -1))
+        return lb_heading_pos
 
     def _get_obs_local_body_rot_obs(self):
         if hasattr(self, "motion_body_ids"):
-            body_rot_w = self.simulator._rigid_body_rot[:, self.motion_body_ids]
+            lb_heading_tan_norm = self.lb_heading_tan_norm[:, self.motion_body_ids]
         else:
-            body_rot_w = self.simulator._rigid_body_rot
+            lb_heading_tan_norm = self.lb_heading_tan_norm
 
-        body_size = body_rot_w.shape[1]
-        quats_inv = rotations.quat_inverse(self.base_quat, w_last = True)
-        quats_inv = torch.repeat_interleave(quats_inv[:, None, :], body_size, dim = 1)
-
-        body_rot_w = torch.reshape(body_rot_w, (-1, 4))
-        quats_inv = torch.reshape(quats_inv, (-1, 4))
-
-        local_body_rot = rotations.quat_mul_norm(quats_inv, body_rot_w, w_last=True)
-        tan_norm = quat_to_tan_norm_xyzw(local_body_rot)
-
-        self.tan_norm = torch.reshape(tan_norm, (-1, body_size * 6))
-        return self.tan_norm
+        return torch.reshape(lb_heading_tan_norm, (lb_heading_tan_norm.shape[0], -1))
 
     def _get_obs_local_body_vel(self):
         if hasattr(self, "motion_body_ids"):
-            body_vel_w = self.simulator._rigid_body_vel[:, self.motion_body_ids]
+            body_vel_w = self.lb_heading_vel[:, self.motion_body_ids]
         else:
-            body_vel_w = self.simulator._rigid_body_vel
+            body_vel_w = self.lb_heading_vel
 
-        body_size = body_vel_w.shape[1]
-
-        quats = torch.repeat_interleave(self.base_quat[:, None, :], body_size, dim = 1)
-        quats = torch.reshape(quats, (-1, 4))
-        body_vel_w = torch.reshape(body_vel_w, (-1, 3))
-        lb_vel = quat_rotate_inverse(quats, body_vel_w)
-        self.lb_vel = torch.reshape(lb_vel, (-1, body_size * 3))
-        return self.lb_vel
+        return torch.reshape(body_vel_w, (body_vel_w.shape[0], -1))
 
     def _get_obs_local_body_ang_vel(self):
         if hasattr(self, "motion_body_ids"):
-            body_ang_vel_w = self.simulator._rigid_body_ang_vel[:, self.motion_body_ids]
+            lb_heading_ang_vel = self.lb_heading_ang_vel[:, self.motion_body_ids]
         else:
-            body_ang_vel_w = self.simulator._rigid_body_ang_vel
+            lb_heading_ang_vel = self.lb_heading_ang_vel
 
-        body_size = body_ang_vel_w.shape[1]
-        quats = torch.repeat_interleave(self.base_quat[:, None, :], body_size, dim = 1)
-        quats = torch.reshape(quats, (-1, 4))
-        body_ang_vel_w = torch.reshape(body_ang_vel_w, (-1, 3))
-        lb_ang_vel = quat_rotate_inverse(quats, body_ang_vel_w)
-        self.lb_ang_vel = torch.reshape(lb_ang_vel, (-1, body_size * 3))
-        return self.lb_ang_vel
+        return torch.reshape(lb_heading_ang_vel, (lb_heading_ang_vel.shape[0], -1))
 
     def _get_obs_history_obs(self,):
         assert "history_obs" in self.config.obs.obs_auxiliary.keys()

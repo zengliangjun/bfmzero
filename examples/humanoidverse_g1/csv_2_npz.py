@@ -9,7 +9,7 @@ if root not in sys.path:
 os.chdir(root)
 
 from humanoidverse_env import motions_main
-#motions_main.humanoidverse_start()
+#motions_main.humanoidverse_play()
 motions_main.humanoidverse_headless()
 
 import torch
@@ -112,9 +112,10 @@ def run_simulator(input_files, input_joint_ids, base_dir, out_dir):
 
 if __name__ == "__main__":
 
-    input_dir = "/workspace/data/csv/g1/LAFAN1_Retargeting_Dataset/"
-    base_dir = "/workspace/data/csv/"
-    out_dir = "/workspace/data/motions/"
+    input_dir = "/workspace/data2/VSCODE/RL_MOTION_TRACKING/MOTIONS_DATASETS/LAFAN1_Retargeting_Dataset/g1/"
+    base_dir = "/workspace/data2/VSCODE/RL_MOTION_TRACKING/MOTIONS_DATASETS/"
+    out_dir = "/workspace/data2/VSCODE/MOTION/FBMODULES/data/motions/g1/"
+
 
     input_files = walk_files(input_dir)
 

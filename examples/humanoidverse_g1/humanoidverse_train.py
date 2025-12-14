@@ -27,7 +27,7 @@ class TrainConfig(workspace.TrainConfig):
 @dataclasses.dataclass
 class BFMConfig(agent.Config):
     def __post_init__(self):
-        self.model.obs_privileges_dim = 448    ## for test
+        self.model.obs_privileges_dim = 493    ## for test
 
         self.train.lr_f = 3e-4
         self.train.lr_b = 1e-5

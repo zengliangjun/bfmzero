@@ -76,13 +76,18 @@ def start(config: OmegaConf):
     humanoidverse_task = env
 
 @hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")
-def humanoidverse_start(config: OmegaConf):
+def humanoidverse_play(config: OmegaConf):
     config.headless = False
+    if hasattr(config.robot.asset, "motions_root"):
+        delattr(config.robot.asset, "motions_root")
+
     start(config)
 
 @hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")
 def humanoidverse_headless(config: OmegaConf):
     config.headless = True
+    if hasattr(config.robot.asset, "motions_root"):
+        delattr(config.robot.asset, "motions_root")
     start(config)
 
 @hydra_motions_main.main(config_path="configs", config_name="motions_envs", version_base="1.1")

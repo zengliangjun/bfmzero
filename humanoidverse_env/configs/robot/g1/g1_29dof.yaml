@@ -6,6 +6,21 @@ defaults:
 robot:
   # Observation parameters
   num_bodies: 30
+  nums_extend_bodies: 3
+  extend_config:
+      - joint_name: "left_hand_link"
+        parent_name: "left_elbow_link"
+        pos: [0.25, 0.0, 0.0]
+        rot: [1.0, 0.0, 0.0, 0.0] # w x y z
+      - joint_name: "right_hand_link"
+        parent_name: "right_elbow_link"
+        pos: [0.25, 0.0, 0.0]
+        rot: [1.0, 0.0, 0.0, 0.0] # w x y z
+      - joint_name: "head_link"
+        parent_name: "torso_link"
+        pos: [0.0, 0.0, 0.42]
+        rot: [1.0, 0.0, 0.0, 0.0] # w x y z
+
   dof_obs_size: 29
   actions_dim: 29
   lower_body_actions_dim: 12
@@ -210,7 +225,7 @@ robot:
 
     fix_base_link: False # TEST: fix base link to world
 
-    motions_root: "data/motions"
+    motions_root: "data/motions/g1/mergers/"
     motions_sample_ratio: 0.5
 
     isaacsim_joint_names: [
