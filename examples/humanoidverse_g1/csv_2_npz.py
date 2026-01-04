@@ -20,13 +20,13 @@ humanoidverse_task: legged_robot_base.LeggedRobotBase = motions_main.humanoidver
 
 
 def walk_files(input_dir):
-    if not osp.isdir(input_dir) and input_dir.endswith(".csv"):
+    if not osp.isdir(input_dir) and (input_dir.endswith(".csv") or input_dir.endswith(".pkl")):
         return [input_dir]
 
     inputfiles = []
     for root, dirs, files in os.walk(input_dir):
         for file in files:
-            if not file.endswith(".csv"):
+            if not file.endswith(".csv") and not file.endswith(".pkl"):
                 continue
             full_file = osp.join(root, file)
             inputfiles.append(full_file)
@@ -103,6 +103,7 @@ def run_simulator(input_files, input_joint_ids, base_dir, out_dir):
 
         out_file = file.replace(base_dir, out_dir)
         out_file = out_file.replace("csv", "pth")
+        out_file = out_file.replace("pkl", "pth")
 
         out_full_dir = osp.dirname(out_file)
         if not osp.exists(out_full_dir):
@@ -112,9 +113,9 @@ def run_simulator(input_files, input_joint_ids, base_dir, out_dir):
 
 if __name__ == "__main__":
 
-    input_dir = "/workspace/data2/VSCODE/RL_MOTION_TRACKING/MOTIONS_DATASETS/LAFAN1_Retargeting_Dataset/g1/"
-    base_dir = "/workspace/data2/VSCODE/RL_MOTION_TRACKING/MOTIONS_DATASETS/"
-    out_dir = "/workspace/data2/VSCODE/MOTION/FBMODULES/data/motions/g1/"
+    input_dir = "/workspace.data2/motions/AMASS_SMPLX/GMR/g1_30fps/"
+    base_dir = "/workspace.data2/motions/AMASS_SMPLX/GMR/g1_30fps/"
+    out_dir = "/workspace.data2/motions/AMASS_SMPLX/GMR/bfmzero/g1_50fps/"
 
 
     input_files = walk_files(input_dir)
