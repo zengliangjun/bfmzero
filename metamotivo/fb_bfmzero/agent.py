@@ -21,6 +21,8 @@ class TrainConfig(FBTrainConfig):
     auxi_critic_pessimism_penalty: float = 0.5
     auxi_reg_coeff: float = 1
 
+    auxi_critic_train_delay: int = 0
+    auxi_critic_train_frequency: int = 4
 
 @dataclasses.dataclass
 class Config:
@@ -260,14 +262,24 @@ class BFMAgent(FBcprAgent):
                 z=train_z,
             )
         )
-        metrics.update(
-            self.update_actor(
-                obs=train_status,
-                action=train_action,
-                z=train_z,
-                clip_grad_norm=clip_grad_norm,
+        if step > self.cfg.train.auxi_critic_train_delay and step % self.cfg.train.auxi_critic_train_frequency == 0:
+            metrics.update(
+                self.update_actor2(
+                    obs=train_status,
+                    action=train_action,
+                    z=train_z,
+                    clip_grad_norm=clip_grad_norm,
+                )
             )
-        )
+        else:
+            metrics.update(
+                self.update_actor(
+                    obs=train_status,
+                    action=train_action,
+                    z=train_z,
+                    clip_grad_norm=clip_grad_norm,
+                )
+            )
 
         with torch.no_grad():
             _soft_update_params(
@@ -334,7 +346,7 @@ class BFMAgent(FBcprAgent):
             }
         return output_metrics
 
-    def update_actor(
+    def update_actor2(
         self,
         obs: torch.Tensor,
         action: torch.Tensor,

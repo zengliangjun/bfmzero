@@ -71,11 +71,34 @@ class MotionBuffer:
         self.config = cfg
         self.device = torch.device("cpu")
 
+        full_files = []
+        for root, dirs, files in os.walk(self.config.motions_root):
+            for file in files:
+                if not file.endswith(".pth"):
+                    continue
+                full_file = osp.join(root, file)
+                full_files.append(full_file)
+
+        self.full_files = full_files
+        import random
+        random.shuffle(self.full_files)
+        random.shuffle(self.full_files)
+        self.current_file_idx = 0
+        self.reload_buffer()
+
+    def reload_buffer(self):
+        if hasattr(self, "storages"):
+            del self.storages
+            del self.trajectory_priorities
+
         self.capacity = 0
         self.storages = {}
         self.trajectory_priorities = []
 
-        self._load_trajectories()
+        self._load_trajectories(self.full_files[self.current_file_idx])
+        self.current_file_idx += 1
+        self.current_file_idx %= len(self.full_files)
+
 
     def _load_file(self, motion_file):
         data = torch.load(motion_file)
@@ -112,17 +135,10 @@ class MotionBuffer:
             self.trajectory_priorities.append(slices)
             self.capacity += 1
 
-    def _load_trajectories(self):
-        for root, dirs, files in os.walk(self.config.motions_root):
-            for file in files:
-                if not file.endswith(".pth"):
-                    continue
-                full_file = osp.join(root, file)
-                self._load_file(full_file)
-
+    def _load_trajectories(self, full_file):
+        self._load_file(full_file)
         self.trajectory_priorities = torch.tensor(self.trajectory_priorities, \
                                                   dtype= torch.float32, device = self.device)
-
         self.trajectory_priorities /= torch.sum(self.trajectory_priorities)
 
     def __len__(self) -> int:

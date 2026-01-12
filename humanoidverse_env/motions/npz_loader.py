@@ -10,13 +10,22 @@ class MotionLoader:
     ):
         frames = 0
         out_items = {}
-        with open(motion_file, 'r+b') as fd:
-            items = np.load(fd)
 
-            for file in items.files:
-                out_items[file] = torch.tensor(items[file], dtype=torch.float32, device=device)
-                if 0 == frames:
-                    frames = out_items[file].shape[0]
+        if motion_file.endswith('.npz'):
+            with open(motion_file, 'r+b') as fd:
+                items = np.load(fd)
+
+                for file in items.files:
+                    out_items[file] = torch.tensor(items[file], dtype=torch.float32, device=device)
+                    if 0 == frames:
+                        frames = out_items[file].shape[0]
+
+        elif motion_file.endswith(".pth"):
+            data = torch.load(motion_file)
+            if "dof_states" in data:
+                out_items["dof_states"] = torch.tensor(data["dof_states"], dtype=torch.float32, device=device)
+                out_items["root_states"] = torch.tensor(data["root_states"], dtype=torch.float32, device=device)
+                frames = out_items["dof_states"].shape[0]
 
         self.current_idx = 0
         self.frames = frames

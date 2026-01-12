@@ -13,8 +13,9 @@ env:
       terminate_by_contact: False # problematic in isaacgym when g1+terrain
       # terminate_by_lin_vel: False
       # terminate_by_ang_vel: False
-      terminate_by_gravity: False
-      terminate_by_low_height: False
+      terminate_by_gravity: True
+      terminate_by_low_height: True
+      terminate_by_terminate_history_count: 6
 
     termination_scales:
       termination_min_base_height : 0.3

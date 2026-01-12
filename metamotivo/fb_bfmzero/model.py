@@ -51,10 +51,18 @@ class DiscriminatorArchiConfig:
 
 @dataclasses.dataclass
 class BackwardArchiConfig:
+    model: str = "simple"  # {'simple', 'residual'}
     hidden_dim: int = 256
     hidden_layers: int = 2
     norm: bool = True
 
+
+@dataclasses.dataclass
+class NewBackwardArchiConfig:
+    model: str = "residual"  # {'simple', 'residual'}
+    hidden_dim: int = 2048
+    hidden_layers: int = 6
+    norm: bool = True
 
 
 @dataclasses.dataclass
@@ -63,6 +71,7 @@ class ArchiConfig:
     norm_z: bool = True
     f: ForwardCriticArchiConfig = dataclasses.field(default_factory=ForwardCriticArchiConfig)
     b: BackwardArchiConfig = dataclasses.field(default_factory=BackwardArchiConfig)
+    # b: NewBackwardArchiConfig = dataclasses.field(default_factory=NewBackwardArchiConfig)
     actor: ActorArchiConfig = dataclasses.field(default_factory=ActorArchiConfig)
 
     critic: DiscCriticArchiConfig = dataclasses.field(default_factory=DiscCriticArchiConfig)

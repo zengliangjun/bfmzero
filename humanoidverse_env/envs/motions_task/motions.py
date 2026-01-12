@@ -40,6 +40,30 @@ class MotionsTask(LeggedRobotBase):
                                          device=self.device,
                                          requires_grad=False) # extend
 
+    def _init_buffers(self):
+        super()._init_buffers()
+        if hasattr(self.config.termination, "terminate_by_terminate_history_count") and \
+            self.config.termination.terminate_by_terminate_history_count > 0:
+
+            self.terminate_history_count = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
+
+    def _update_reset_buf(self):
+        super()._update_reset_buf()
+
+        if hasattr(self, "terminate_history_count"):
+            terminated = (self.reset_buf != 0).to(torch.int32)
+            self.terminate_history_count = self.terminate_history_count * terminated + self.reset_buf.to(torch.int32)
+            self.reset_buf[:] = self.terminate_history_count >= self.config.termination.terminate_by_terminate_history_count
+
+    def reset_envs_idx(self, env_ids, target_states=None, target_buf=None):
+        super().reset_envs_idx(env_ids, target_states, target_buf)
+        if hasattr(self, "terminate_history_count") and len(env_ids) != 0:
+            self.terminate_history_count[env_ids] = 0
+
+        if hasattr(self, "reset_motion_buffer"):
+            if self.common_step_counter % (self.max_episode_length * 1000) == 0:
+                self.reset_motion_buffer.update_buffer()
+
     ######################### for motion play #########################
     def get_motion_joint(self, joint_names: list):
         joint_ids = []

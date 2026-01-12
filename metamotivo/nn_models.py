@@ -101,17 +101,20 @@ class eval_mode:
 ##########################
 
 def build_backward(obs_dim, z_dim, cfg):
-    return BackwardMap(obs_dim, z_dim, cfg.hidden_dim, cfg.hidden_layers, cfg.norm)
+    if cfg.model == "simple":
+        return BackwardMap(obs_dim, z_dim, cfg.hidden_dim, cfg.hidden_layers, cfg.norm)
+    elif cfg.model == "residual":
+        return ResidualBackwardMap(obs_dim, z_dim, cfg.hidden_dim, cfg.hidden_layers, cfg.norm)
 
 def build_forward(obs_dim, z_dim, action_dim, cfg, output_dim=None):
     if cfg.ensemble_mode == "seq":
         return SequetialFMap(obs_dim, z_dim, action_dim, cfg)
     elif cfg.ensemble_mode == "vmap":
         raise NotImplementedError("vmap ensemble mode is currently not supported")
-    
+
     assert cfg.ensemble_mode == "batch", "Invalid value for ensemble_mode. Use {'batch', 'seq', 'vmap'}"
     return _build_batch_forward(obs_dim, z_dim, action_dim, cfg, output_dim)
-    
+
 def _build_batch_forward(obs_dim, z_dim, action_dim, cfg, output_dim=None, parallel=True):
     if cfg.model == "residual":
         forward_cls = ResidualForwardMap
@@ -137,7 +140,7 @@ def build_discriminator(obs_dim, z_dim, cfg):
 def linear(input_dim, output_dim, num_parallel=1):
     if num_parallel > 1:
         return DenseParallel(input_dim, output_dim, n_parallel=num_parallel)
-    return nn.Linear(input_dim, output_dim) 
+    return nn.Linear(input_dim, output_dim)
 
 def layernorm(input_dim, num_parallel=1):
     if num_parallel > 1:
@@ -156,7 +159,7 @@ class BackwardMap(nn.Module):
         for _ in range(hidden_layers-1):
             seq += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
         seq += [nn.Linear(hidden_dim, z_dim)]
-        if norm: 
+        if norm:
             seq += [Norm()]
         self.net = nn.Sequential(*seq)
 
@@ -174,7 +177,7 @@ def simple_embedding(input_dim, hidden_dim, hidden_layers, num_parallel=1):
 
 
 class ForwardMap(nn.Module):
-    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1, 
+    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1,
                  embedding_layers: int = 2, num_parallel: int = 2, output_dim=None) -> None:
         super().__init__()
         self.z_dim = z_dim
@@ -189,7 +192,7 @@ class ForwardMap(nn.Module):
             seq += [linear(hidden_dim, hidden_dim, num_parallel), nn.ReLU()]
         seq += [linear(hidden_dim, output_dim if output_dim else z_dim, num_parallel)]
         self.Fs = nn.Sequential(*seq)
-    
+
     def forward(self, obs: torch.Tensor, z: torch.Tensor, action: torch.Tensor):
         if self.num_parallel > 1:
             obs = obs.expand(self.num_parallel, -1, -1)
@@ -203,7 +206,7 @@ class ForwardMap(nn.Module):
 class SequetialFMap(nn.Module):
     def __init__(self, obs_dim, z_dim, action_dim, cfg, output_dim=None):
         super().__init__()
-        self.models = nn.ModuleList([_build_batch_forward(obs_dim, z_dim, action_dim, 
+        self.models = nn.ModuleList([_build_batch_forward(obs_dim, z_dim, action_dim,
                                                           cfg, output_dim, parallel=False) for _ in range(cfg.num_parallel)])
 
     def forward(self, obs: torch.Tensor, z: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -212,7 +215,7 @@ class SequetialFMap(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1, 
+    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1,
                  embedding_layers: int = 2) -> None:
         super().__init__()
 
@@ -297,7 +300,7 @@ def residual_embedding(input_dim, hidden_dim, hidden_layers, num_parallel=1):
 
 
 class ResidualForwardMap(nn.Module):
-    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1, 
+    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1,
                  embedding_layers: int = 2, num_parallel: int = 2, output_dim=None) -> None:
         super().__init__()
         self.z_dim = z_dim
@@ -310,7 +313,7 @@ class ResidualForwardMap(nn.Module):
         seq = [ResidualBlock(hidden_dim, num_parallel) for _ in range(hidden_layers)]
         seq += [Block(hidden_dim, output_dim if output_dim else z_dim, False, num_parallel)]
         self.Fs = nn.Sequential(*seq)
-    
+
     def forward(self, obs: torch.Tensor, z: torch.Tensor, action: torch.Tensor):
         if self.num_parallel > 1:
             obs = obs.expand(self.num_parallel, -1, -1)
@@ -322,7 +325,7 @@ class ResidualForwardMap(nn.Module):
 
 
 class ResidualActor(nn.Module):
-    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1, 
+    def __init__(self, obs_dim, z_dim, action_dim, hidden_dim, hidden_layers: int = 1,
                  embedding_layers: int = 2) -> None:
         super().__init__()
 
@@ -340,6 +343,20 @@ class ResidualActor(nn.Module):
         std = torch.ones_like(mu) * std
         dist = TruncatedNormal(mu, std)
         return dist
+
+class ResidualBackwardMap(nn.Module):
+    def __init__(self, goal_dim, z_dim, hidden_dim, hidden_layers: int = 2, norm=True) -> None:
+        super().__init__()
+        seq = [nn.Linear(goal_dim, hidden_dim), nn.LayerNorm(hidden_dim), nn.Tanh()]
+        for _ in range(hidden_layers-1):
+            seq += [ResidualBlock(hidden_dim), nn.ReLU()]
+        seq += [nn.Linear(hidden_dim, z_dim)]
+        if norm:
+            seq += [Norm()]
+        self.net = nn.Sequential(*seq)
+
+    def forward(self, x):
+        return self.net(x)
 
 
 ##########################
@@ -443,7 +460,7 @@ class ParallelLayerNorm(nn.Module):
         if self.elementwise_affine:
             nn.init.ones_(self.weight)
             nn.init.zeros_(self.bias)
-    
+
     def load_module_list_weights(self, module_list) -> None:
         with torch.no_grad():
             assert len(module_list) == self.n_parallel
