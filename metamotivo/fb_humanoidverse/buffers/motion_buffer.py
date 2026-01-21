@@ -8,7 +8,7 @@ from typing import Union, Mapping, Optional, Dict
 from pathlib import Path
 from loguru import logger as ulogger
 import dataclasses
-
+import random
 
 @dataclasses.dataclass
 class MotionBufferConfig():
@@ -88,14 +88,32 @@ class MotionBuffer:
 
     def reload_buffer(self):
         if hasattr(self, "storages"):
-            del self.storages
-            del self.trajectory_priorities
+            old_storages = self.storages
+        else:
+            old_storages = None
 
         self.capacity = 0
         self.storages = {}
         self.trajectory_priorities = []
 
         self._load_trajectories(self.full_files[self.current_file_idx])
+
+        if old_storages:
+            keys = list(old_storages.keys())
+            keep_keys = random.sample(keys, len(keys) // 4)
+            keep_storages = {k: old_storages[k] for k in keep_keys}
+            self.storages.update(keep_storages)
+
+        new_key = 0
+        new_storages = {}
+        for k, v in self.storages.items():
+            new_storages[new_key] = v
+            new_key += 1
+
+        self.storages = new_storages
+        self.trajectory_priorities = torch.ones((new_key), \
+                                                  dtype= torch.float32, device = self.device)
+
         self.current_file_idx += 1
         self.current_file_idx %= len(self.full_files)
 
@@ -137,9 +155,6 @@ class MotionBuffer:
 
     def _load_trajectories(self, full_file):
         self._load_file(full_file)
-        self.trajectory_priorities = torch.tensor(self.trajectory_priorities, \
-                                                  dtype= torch.float32, device = self.device)
-        self.trajectory_priorities /= torch.sum(self.trajectory_priorities)
 
     def __len__(self) -> int:
         return len(self.capacity)
